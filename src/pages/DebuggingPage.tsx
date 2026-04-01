@@ -27,6 +27,7 @@ import { DebugSession, Product, TestLog } from '@/types';
 import { useAppSelector } from '@/hooks/redux';
 import { useAppUI } from '@/context/AppUIContext';
 import { DEBUG_RESOLUTION_OPTIONS, toTitle } from '@/utils/workflowOptions';
+import { hasPermission } from '@/utils/rbac';
 
 interface DebugFormState {
     issue_identified: string;
@@ -69,6 +70,8 @@ const getAgeText = (date: Date): string => {
 const DebuggingPage = () => {
     const { user } = useAppSelector((state) => state.auth);
     const { notify, confirm } = useAppUI();
+    const canWriteDebugSessions =
+        hasPermission(user?.role, 'debugging.create') || hasPermission(user?.role, 'debugging.update');
 
     const [queue, setQueue] = useState<QueueItem[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -176,6 +179,11 @@ const DebuggingPage = () => {
     };
 
     const submitDebugSession = async (item: QueueItem) => {
+        if (!canWriteDebugSessions) {
+            notify({ message: 'You do not have permission to add debug sessions.', severity: 'error' });
+            return;
+        }
+
         const form = getForm(item.log._id);
 
         if (!form.issue_identified.trim() || !form.root_cause.trim() || !form.action_taken.trim()) {
@@ -432,7 +440,7 @@ const DebuggingPage = () => {
                                                             <Button
                                                                 variant="contained"
                                                                 onClick={() => void submitDebugSession(item)}
-                                                                disabled={submittingLogId === item.log._id}
+                                                                disabled={!canWriteDebugSessions || submittingLogId === item.log._id}
                                                             >
                                                                 {submittingLogId === item.log._id ? 'Saving...' : 'Save Debug Session'}
                                                             </Button>

@@ -148,6 +148,13 @@ const UsersPage = () => {
             return;
         }
 
+        const needsAssignedStation = createState.role === 'test_operator' || createState.role === 'flash_operator';
+        const assignedStation = createState.assigned_station.trim();
+        if (needsAssignedStation && !assignedStation) {
+            notify({ message: 'Assigned station is required for this role.', severity: 'warning' });
+            return;
+        }
+
         try {
             setIsLoading(true);
 
@@ -156,19 +163,21 @@ const UsersPage = () => {
                 email: createState.email.trim(),
                 phone: createState.phone.trim(),
                 password: createState.password,
+                role: createState.role,
+                assigned_station: assignedStation || null,
             });
 
-            let refreshed = await loadUsers();
-            const createdUser = refreshed.find((user) => user.email.toLowerCase() === createState.email.trim().toLowerCase());
-
-            if (createdUser) {
-                await userService.updateUser(createdUser.id, {
-                    role: createState.role,
-                    assigned_station: createState.assigned_station,
-                    status: createState.is_active ? 'active' : 'deactive',
-                } as any);
-
-                refreshed = await loadUsers();
+            if (!createState.is_active) {
+                const refreshed = await loadUsers();
+                const createdUser = refreshed.find((user) => user.email.toLowerCase() === createState.email.trim().toLowerCase());
+                if (createdUser) {
+                    await userService.updateUser(createdUser.id, {
+                        status: 'deactive',
+                    } as any);
+                    await loadUsers();
+                }
+            } else {
+                await loadUsers();
             }
 
             notify({ message: 'User created successfully.', severity: 'success' });

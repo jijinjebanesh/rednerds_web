@@ -38,6 +38,7 @@ const getProgress = (produced: number, planned: number) => {
 
 const defaultCreateForm: CreateBatchForm = {
     _id: '',
+    batch_name: '',
     project_id: '',
     model_variant: '',
     planned_qty: 1,
@@ -85,6 +86,7 @@ const BatchesPage = () => {
         return batches.filter((batch) => {
             return (
                 batch._id.toLowerCase().includes(term) ||
+                batch.batch_name.toLowerCase().includes(term) ||
                 batch.project_id.toLowerCase().includes(term) ||
                 batch.model_variant.toLowerCase().includes(term) ||
                 batch.status.toLowerCase().includes(term)
@@ -126,8 +128,8 @@ const BatchesPage = () => {
     };
 
     const handleCreateBatch = async () => {
-        if (!createForm._id || !createForm.project_id || !createForm.model_variant || !createForm.start_date) {
-            notify({ message: 'Please fill batch ID, project, variant, and start date.', severity: 'warning' });
+        if (!createForm.batch_name || !createForm.project_id || !createForm.model_variant || !createForm.start_date) {
+            notify({ message: 'Please fill batch name, project, variant, and start date.', severity: 'warning' });
             return;
         }
 
@@ -135,6 +137,7 @@ const BatchesPage = () => {
             dispatch(setLoading(true));
             await batchService.createBatch({
                 ...createForm,
+                batch_name: createForm.batch_name.trim(),
                 planned_qty: Math.max(1, Number(createForm.planned_qty || 0)),
                 start_date: new Date(createForm.start_date),
                 notes: createForm.notes?.trim() || undefined,
@@ -153,28 +156,10 @@ const BatchesPage = () => {
     };
 
     const handleCreateProjectChange = async (projectId: string) => {
-        const project = projects.find((item) => item._id === projectId) ?? null;
-
         setCreateForm((prev) => ({
             ...prev,
             project_id: projectId,
         }));
-
-        if (!projectId || !project) return;
-
-        try {
-            const response = await batchService.getBatches(1, 500, { project_id: projectId });
-            const nextSeq = String(response.total + 1).padStart(3, '0');
-            const autoId = `BATCH-${project.slug.toUpperCase()}-${nextSeq}`;
-
-            setCreateForm((prev) => ({
-                ...prev,
-                project_id: projectId,
-                _id: autoId,
-            }));
-        } catch {
-            // Keep manual ID entry if batch count lookup fails.
-        }
     };
 
     const openEditDialog = (batch: Batch) => {
@@ -249,7 +234,7 @@ const BatchesPage = () => {
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr 1fr' }, gap: 1.5, mb: 2 }}>
                 <TextField
                     fullWidth
-                    placeholder="Search by batch ID, project ID, variant, or status"
+                    placeholder="Search by batch ID, batch name, project ID, variant, or status"
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                 />
@@ -278,6 +263,7 @@ const BatchesPage = () => {
                     <TableHead sx={{ bgcolor: '#f5f5f5' }}>
                         <TableRow>
                             <TableCell sx={{ fontWeight: 'bold' }}>Batch ID</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Batch Name</TableCell>
                             <TableCell sx={{ fontWeight: 'bold' }}>Project</TableCell>
                             <TableCell sx={{ fontWeight: 'bold' }}>Variant</TableCell>
                             <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
@@ -290,7 +276,7 @@ const BatchesPage = () => {
                     <TableBody>
                         {filteredBatches.length === 0 && !isLoading && (
                             <TableRow>
-                                <TableCell colSpan={8} sx={{ py: 3 }}>
+                                <TableCell colSpan={9} sx={{ py: 3 }}>
                                     <Typography color="text.secondary">No batches found.</Typography>
                                 </TableCell>
                             </TableRow>
@@ -301,6 +287,7 @@ const BatchesPage = () => {
                             return (
                                 <TableRow key={batch._id} hover onClick={() => navigate(`/manufacturing/batches/${batch._id}`)} sx={{ cursor: 'pointer' }}>
                                     <TableCell>{batch._id}</TableCell>
+                                    <TableCell>{batch.batch_name || '-'}</TableCell>
                                     <TableCell>{batch.project_id}</TableCell>
                                     <TableCell>{batch.model_variant}</TableCell>
                                     <TableCell>{toTitle(batch.status)}</TableCell>
@@ -355,10 +342,10 @@ const BatchesPage = () => {
                     <TextField
                         fullWidth
                         margin="normal"
-                        label="Batch ID"
-                        value={createForm._id ?? ''}
-                        onChange={(event) => setCreateForm((prev) => ({ ...prev, _id: event.target.value.toUpperCase().trim() }))}
-                        placeholder="BATCH-PEECEE-001"
+                        label="Batch Name"
+                        value={createForm.batch_name}
+                        onChange={(event) => setCreateForm((prev) => ({ ...prev, batch_name: event.target.value }))}
+                        placeholder="Mainline April Run"
                     />
 
                     <Select

@@ -1,0 +1,521 @@
+================================================================================
+                    DASHBOARD PAGE - COMPREHENSIVE GUIDE
+================================================================================
+
+PROJECT: RedNerd's Web Application
+PAGE: Dashboard (DashboardPage.tsx)
+PURPOSE: Real-time Quality Analytics & Operational Insights Powered by AI
+
+================================================================================
+OVERVIEW
+================================================================================
+
+The Dashboard is the central hub for monitoring manufacturing quality, testing 
+metrics, debugging operations, and repair management. It provides real-time 
+analytics with AI-powered insights into product quality, testing trends, and 
+operational performance.
+
+The dashboard is designed to give stakeholders a quick, comprehensive view of:
+- Product quality and testing performance
+- Debugging and troubleshooting activities
+- Manufacturing metrics and repair cases
+- Issue identification and root cause analysis
+- Testing trends and product status
+
+================================================================================
+KEY FEATURES & SECTIONS
+================================================================================
+
+1. MASTER KPI CARDS (Top Section)
+===============================
+
+Four prominent metric cards with gradient backgrounds display key performance 
+indicators:
+
+   a) QUALITY SCORE
+      - Shows the overall pass rate percentage (e.g., 78.5%)
+      - Displayed as a large formatted number with a colored progress bar
+      - Visual indicator: Green progress bar
+      - Icon: CheckCircle icon
+      - Updates based on testing statistics
+
+   b) DEBUG SESSIONS
+      - Total number of debugging sessions initiated/troubleshoot attempts
+      - Shows cumulative count of all debug activities
+      - Icon: 🔧 Wrench emoji
+      - Updates from analytics data
+
+   c) AVERAGE DEBUG TIME
+      - Shows average duration per debug session in minutes
+      - Example: "45.3m" means average 45.3 minute debug sessions
+      - Icon: Speed icon
+      - Helps identify if debugging is taking too long
+
+   d) PRODUCTS UNDER TEST
+      - Total number of products currently under testing
+      - Icon: TrendingUp icon
+      - Shows system workload
+
+Each card features:
+- Smooth loading states with skeleton loaders
+- Color-coded gradient backgrounds for visual appeal
+- Formatted numbers (e.g., "1,234" instead of "1234")
+- Easy-to-scan layout
+
+2. TABBED ANALYTICS SECTION
+===========================
+
+Four tabs allow navigation between different analytical views:
+
+   TAB 1: 🔍 PROBLEM ANALYSIS
+   -------------------------
+   Displays common problems and issues affecting products
+
+   Shows:
+   - Problem Description: Text of the issue encountered
+   - Severity Level: Color-coded chips (Critical, High, Medium, Low)
+   - Occurrence Count: How many times this problem appeared
+   - Affected Products: Number of unique products experiencing the issue
+   - Resolution Rate: Percentage showing how often this problem was resolved
+   - Visual: Color-coded card backgrounds based on severity
+     * Critical: Red background (#d32f2f)
+     * High: Orange background (#f57c00)
+     * Medium: Yellow background (#fbc02d)
+     * Low: Green background (#388e3c)
+
+   Cards display:
+   - Problem title (truncated if > 100 characters)
+   - Severity badge in the top-right
+   - Two stat boxes: "Occurrences" and "Products Affected"
+   - Colored progress bar showing resolution success rate
+
+
+   TAB 2: 📊 TESTING TRENDS
+   ----------------------
+   Provides visualization of testing metrics over time
+
+   Shows:
+   - Test Results Trend Chart (Last 14 Days)
+     * Stacked bar chart showing Pass/Partial/Fail results
+     * X-axis: Dates formatted as "Mon 1", "Tue 2", etc.
+     * Y-axis: Count of tests
+     * Color coding:
+       - Green bars: Passed tests
+       - Orange bars: Partial tests
+       - Red bars: Failed tests
+     * Interactive tooltips on hover
+
+   - Products by Stage Pie Chart
+     * Distribution of products across different manufacturing stages
+     * Shows what percentage of products are at each stage
+     * Products can be at stages like: Assembly, Testing, QA, Shipped, etc.
+     * Color-coded slices with legend
+
+
+   TAB 3: ⚙️ ROOT CAUSES
+   --------------------
+   Deep-dive analysis into underlying causes of failures
+
+   Each root cause entry shows:
+   - Root Cause Description: Text explaining the technical issue
+   - Frequency Count: How many times this root cause was identified
+   - Resolution Success Rate: Percentage of fixes that worked
+   - Visual indicator: Blue top border, hover effect for interactivity
+   - Progress bar showing success rate with color coding:
+     * Green (>70%): High success rate
+     * Orange (50-70%): Medium success rate  
+     * Red (<50%): Low success rate
+
+
+   TAB 4: 🏭 PRODUCTS STATUS
+   -------------------------
+   Per-product testing insights and status
+
+   For each product:
+   - Product Name: Display name of the product
+   - Product ID: Unique identifier
+   - Status Badge: "RETEST ⏱️" (warning) or "Ready ✓" (success)
+   
+   Displays metrics in mini stat boxes:
+   - Passed: Number of passed tests (blue background)
+   - Failed: Number of failed tests (red background)
+   - Debug: Count of debug sessions for this product (purple background)
+   - Pass Rate: Percentage of tests that passed (green/orange/red based on rate)
+   - Status: Shows "⚠️ Review" if needs retest, "✅ Ready" if all clear
+
+   Visual Indicators:
+   - Products needing retest have orange border and light background
+   - Cards highlight with shadow on hover
+   - Pass rate color coding:
+     * Green: >70% pass rate (good)
+     * Orange: 50-70% pass rate (caution)
+     * Red: <50% pass rate (attention needed)
+
+3. OPERATIONAL METRICS SECTION
+===============================
+
+Four legacy metric cards that show crucial operational data:
+
+   a) PRODUCTS MANUFACTURED (This Month)
+      - Count of new products made in current month
+      - Filters products by manufacturing date
+      - Shows only products from current month
+
+   b) FIRST-PASS YIELD
+      - Percentage of products that pass testing on first attempt
+      - Formula: (Pass tests / Total tests) * 100
+      - Example: "87.5%" means most products pass without issues
+
+   c) OPEN DEBUG QUEUE
+      - Number of failed/partial tests awaiting debug work
+      - Filters tests that don't have resolved debug sessions
+      - Indicates workload for debugging team
+
+   d) OPEN REPAIR CASES
+      - Count of customer repair cases with status: "received" or "in_progress"
+      - Shows how many repairs are still active
+      - Excludes completed repairs
+
+   Each card has:
+   - Title describing the metric
+   - Current value (with retry link if error occurs)
+   - Error state with retry button
+   - Loading skeleton while fetching
+
+4. ISSUE INSIGHTS SECTION
+=========================
+
+Two side-by-side panels:
+
+   LEFT PANEL: Top Recurring Issues (Fuzzy Grouped)
+   -----------------------------------------------
+   Uses intelligent fuzzy matching to group similar issues together
+
+   Shows:
+   - Ranked list of top 6 most common issue clusters
+   - Each item numbered (#1, #2, #3, etc.)
+   - Cluster description (first 80 chars shown, truncated if longer)
+   - Count of issues in this cluster
+   - Up to 3 example issues from the cluster
+   
+   Clustering Algorithm:
+   - Normalizes issue text (lowercase, removes special chars, etc.)
+   - Calculates Jaccard similarity between issues (token-based)
+   - Groups issues with >= 35% similarity together
+   - Helps identify patterns even if text is slightly different
+
+   RIGHT PANEL: Symptom Keywords (Testing)
+   ----------------------------------------
+   Text analysis of test symptoms/failures
+
+   Shows:
+   - Top 8 most frequently occurring symptom keywords
+   - Keywords are 3+ characters long
+   - Listed with occurrence frequency
+   - Sorted by how often they appear
+   - Helps identify common failure patterns
+
+
+================================================================================
+DATA SOURCES & INTEGRATION
+================================================================================
+
+The dashboard pulls data from multiple services:
+
+1. analyticsService.getDashboardAnalytics()
+   - Returns: commonProblems, rootCauses, testingStatistics, productInsights
+   - Frequency: Loaded on page mount
+
+2. productService.getProducts()
+   - Returns: All products with manufacturing dates and stages
+   - Used for: Monthly product count, stage distribution
+
+3. testLogService.getTestLogs()
+   - Returns: All test results with dates and outcomes
+   - Used for: Yield calculation, test trends, symptom analysis
+
+4. debugSessionService.getDebugSessions()
+   - Returns: Debug sessions with resolution status
+   - Used for: Debug queue size, debug metrics
+
+5. customerRepairService.getRepairs()
+   - Returns: Repair cases with status
+   - Used for: Open repair case count
+
+================================================================================
+DATA LOADING & STATE MANAGEMENT
+================================================================================
+
+Initial Load:
+- Dashboard fetches all data in parallel when component mounts
+- Uses Promise.all() for efficient concurrent requests
+- Sets chartLoading = true while data is being fetched
+
+State Variables:
+- productsMetric: Monthly product count metric
+- yieldMetric: Pass rate percentage
+- debugQueueMetric: Pending debug work count
+- repairsMetric: Open repair cases count
+- commonProblems: List of problem entries
+- rootCauses: List of root cause entries
+- testingStats: Aggregated testing statistics
+- productInsights: Per-product testing data
+- issueInsights: Grouped recurring issues
+- issueInsightsError: Error message if issue loading fails
+
+Each metric state contains:
+- value: Current displayed value
+- loading: Boolean indicating if data is being fetched
+- error: Error message if load failed
+
+================================================================================
+ERROR HANDLING
+================================================================================
+
+The dashboard has graceful error handling:
+
+1. Failed Metric Cards
+   - Show "Failed to load" message
+   - Display clickable "Retry" link
+   - Allow user to retry individual metrics
+
+2. Chart Loading Errors
+   - Display skeleton loaders while loading
+   - Show "No data available" messages if empty
+   - Show error text if fetching failed
+
+3. Retry Mechanism
+   - Each metric has individual retry function
+   - "Retry All" button refreshes entire dashboard
+   - OnRefresh handler in PageHeader triggers full reload
+
+Error Messages:
+- API errors: Shows error message from server response
+- Network errors: Shows generic "Failed to load" message
+- Missing data: Shows "No [data type] available yet"
+
+================================================================================
+USER INTERACTIONS
+================================================================================
+
+1. Tab Navigation
+   - Click tabs to switch between analytical views
+   - Only one tab content visible at a time
+   - Tab state preserved during browsing
+
+2. Hover Effects
+   - Cards on hover translate up 4px with shadow
+   - Problem/cause cards highlight on hover
+   - Product cards enlarge shadow on hover
+
+3. Tooltips
+   - Hover over status indicators for details
+   - Example: "Review needed" for products requiring retest
+
+4. Refresh Button
+   - Located in PageHeader
+   - Reloads all dashboard data
+   - Shows loading state while refreshing
+
+5. Drill-Down Capability
+   - Products can lead to ProductDetailsPage
+   - Issues can provide context for debugging
+
+================================================================================
+VISUAL DESIGN ELEMENTS
+================================================================================
+
+Color Palette:
+- Primary Blue: #1976d2 (Used for main content)
+- Success Green: #2e7d32 (Pass/Success states)
+- Warning Orange: #f57c00 (Caution state)
+- Error Red: #d32f2f (Failure/Critical state)
+- Alert Yellow: #fbc02d (Medium severity)
+- Info Cyan: #0288d1 (Secondary info)
+
+Gradient Backgrounds (KPI Cards):
+- Quality Score: Purple (#667eea to #764ba2)
+- Debug Sessions: Pink-Red (#f093fb to #f5576c)
+- Debug Time: Cyan (#4facfe to #00f2fe)
+- Products: Yellow-Pink (#fa709a to #fee140)
+
+Icons Used:
+- CheckCircle: Quality metrics
+- Speed: Performance/time metrics
+- TrendingUp: Product volume metrics
+- 🔧: Debug-related items
+- 📊: Testing/analytics
+- ⚙️: Operations
+- ⚠️: Warning/review needed
+- ✅: Ready/passed
+
+Typography:
+- Page Title: "h4" variant
+- Section Titles: "h6" variant with bold weight
+- Metric Values: "h3" variant with bold weight
+- Card Titles: "subtitle1" variant with bold weight
+
+Spacing:
+- Inter-section spacing: 4 grid units (mb: 4)
+- Card spacing: 2-3 grid units
+- Internal padding: 2-3 units (p: 2-3)
+
+================================================================================
+PERFORMANCE CONSIDERATIONS
+================================================================================
+
+Optimization Techniques Used:
+
+1. useMemo Hooks
+   - testResultsByDay: Recalculates only when testLogs change
+   - stageDistribution: Recalculates only when products change
+   - symptomInsights: Recalculates only when testLogs change
+
+2. Lazy Calculation
+   - Only calculates data for visible chart
+   - Symptom keywords extracted on-demand
+
+3. Parallel Data Loading
+   - Uses Promise.all() to load all data simultaneously
+   - Reduces total load time vs sequential requests
+
+4. Pagination
+   - Requests limit of 1000 items (practical limit for dashboard)
+   - Avoids massive data transfers
+
+5. Number Formatting
+   - Formats large numbers using Intl.NumberFormat
+   - Improves readability (1,200 vs 1200)
+
+================================================================================
+TECHNICAL IMPLEMENTATION
+================================================================================
+
+Framework: React with TypeScript
+UI Library: Material-UI (MUI)
+Charts: Recharts (for Bar, Pie, and other visualizations)
+Icons: Material-UI Icons
+
+Key Dependencies:
+- recharts: Data visualization
+- @mui/material: Component library
+- @mui/icons-material: Icon library
+
+Component Structure:
+- Functional component with hooks
+- Uses state for data and UI state
+- Uses effects for data fetching
+- Uses memo for performance optimization
+
+Responsive Design:
+- Grid system with breakpoints:
+  * xs: 0px (mobile)
+  * sm: 600px (tablet)
+  * md: 960px (desktop)
+- Flexible layouts adapt to screen size
+
+================================================================================
+WORKFLOW & USE CASES
+================================================================================
+
+Use Case 1: Executive Overview
+- Manager opens dashboard for high-level metrics
+- Views KPI cards for quick status
+- Reviews quality score and product count
+
+Use Case 2: QA Analysis
+- QA team checks Problem Analysis tab
+- Identifies top issues affecting products
+- Understands severity and impact
+
+Use Case 3: Debug Team Management
+- Sees debug queue size metric
+- Reviews Root Cause Analysis tab
+- Identifies patterns to prevent recurrence
+
+Use Case 4: Manufacturing Planning
+- Views Products by Stage pie chart
+- Understands production bottlenecks
+- Plans resources based on workload
+
+Use Case 5: Repair Team View
+- Checks open repair cases count
+- Reviews products needing retest
+- Prioritizes work based on status
+
+================================================================================
+REFRESH & UPDATE FREQUENCY
+================================================================================
+
+Data Refresh:
+- Manual refresh via PageHeader button
+- Full reload on component mount (useEffect with empty dependency)
+- No automatic refresh (manual trigger only)
+
+Real-Time Updates:
+- Not real-time; shows snapshot at load time
+- Users must manually refresh to see latest data
+
+Caching:
+- No caching implemented
+- Each refresh fetches fresh data from API
+
+================================================================================
+RESPONSIVE BEHAVIOR
+================================================================================
+
+Mobile (xs < 600px):
+- KPI cards stack vertically (full width)
+- Charts reduce height
+- Tabs remain accessible
+- Single column layout
+
+Tablet (sm: 600-960px):
+- KPI cards display 2 per row
+- Charts optimize for medium width
+- Readable text with good spacing
+
+Desktop (md > 960px):
+- KPI cards display 4 per row (ideal layout)
+- Full-width charts with optimal dimensions
+- Multi-column product insights
+- Comprehensive view of all metrics
+
+================================================================================
+LIMITATIONS & FUTURE IMPROVEMENTS
+================================================================================
+
+Current Limitations:
+1. No real-time updates (manual refresh required)
+2. No data export functionality
+3. Limited filtering options
+4. Fixed time range for trends (14 days hard-coded)
+5. Issue clustering limited to top 6 clusters
+6. No user preference settings
+
+Potential Enhancements:
+1. WebSocket integration for real-time updates
+2. Export to PDF/Excel reports
+3. Custom date range selection
+4. More granular filtering by product/status
+5. Dashboard customization (user-selected widgets)
+6. Comparison with historical data/trends
+7. Alert system for threshold breaches
+8. Drill-down navigation to detailed pages
+
+================================================================================
+CONCLUSION
+================================================================================
+
+The Dashboard is a comprehensive analytics hub providing real-time insights into
+manufacturing quality, testing performance, and operational metrics. It combines
+multiple data sources, advanced analysis techniques (fuzzy matching, clustering),
+and intuitive visualizations to help stakeholders make informed decisions about
+product quality and manufacturing processes.
+
+The modular tab structure allows different user roles to focus on relevant data,
+while KPI cards provide at-a-glance status for quick decision-making. Ongoing
+data collection and analytics drive continuous improvement in manufacturing
+quality and efficiency.
+
+================================================================================

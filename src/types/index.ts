@@ -57,6 +57,7 @@ export interface Project {
 // Batch Types
 export interface Batch {
     _id: string;
+    batch_name: string;
     project_id: string;
     project_slug?: string;
     model_variant: string;
@@ -193,6 +194,7 @@ export interface CreateProjectForm {
 
 export interface CreateBatchForm {
     _id?: string;
+    batch_name: string;
     project_id: string;
     model_variant: string;
     planned_qty: number;

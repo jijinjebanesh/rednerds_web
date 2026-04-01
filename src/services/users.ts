@@ -17,6 +17,8 @@ export interface CreateUserPayload {
     email: string;
     phone: string;
     password: string;
+    role?: string;
+    assigned_station?: string | null;
 }
 
 const mapUser = (payload: any): AppUser => {

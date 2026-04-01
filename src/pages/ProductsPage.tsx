@@ -54,7 +54,7 @@ const defaultCreateForm: CreateProductForm = {
     project_slug: '',
     model_variant: '',
     manufactured_at: new Date(),
-    current_stage: 'flashing',
+    current_stage: 'testing',
     status: 'active',
 };
 
@@ -80,7 +80,7 @@ const ProductsPage = () => {
     const [createForm, setCreateForm] = useState<CreateProductForm>(defaultCreateForm);
 
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-    const [editStage, setEditStage] = useState<ProductStage>('flashing');
+    const [editStage, setEditStage] = useState<ProductStage>('testing');
     const [editStatus, setEditStatus] = useState<ProductStatus>('active');
 
     const canCreateProduct = hasPermission(role, 'products.create');
@@ -113,6 +113,11 @@ const ProductsPage = () => {
         () => projects.find((project) => project._id === createForm.project_id) ?? null,
         [projects, createForm.project_id]
     );
+
+    const availableBatches = useMemo(() => {
+        if (!createForm.project_id) return batches;
+        return batches.filter((batch) => batch.project_id === createForm.project_id);
+    }, [batches, createForm.project_id]);
 
     const loadProjectsAndBatches = async () => {
         try {
@@ -147,10 +152,11 @@ const ProductsPage = () => {
     };
 
     const handleBatchChange = (batchId: string) => {
-        const batch = batches.find((item) => item._id === batchId) ?? null;
+        const normalizedBatchId = String(batchId ?? '').trim();
+        const batch = batches.find((item) => item._id === normalizedBatchId) ?? null;
 
         if (!batch) {
-            setCreateForm((prev) => ({ ...prev, batch_id: batchId }));
+            setCreateForm((prev) => ({ ...prev, batch_id: normalizedBatchId }));
             return;
         }
 
@@ -158,7 +164,7 @@ const ProductsPage = () => {
 
         setCreateForm((prev) => ({
             ...prev,
-            batch_id: batchId,
+            batch_id: normalizedBatchId,
             project_id: batch.project_id,
             project_slug: linkedProject?.slug ?? prev.project_slug,
             model_variant: batch.model_variant || prev.model_variant,
@@ -166,17 +172,42 @@ const ProductsPage = () => {
     };
 
     const handleProjectChange = (projectId: string) => {
-        const project = projects.find((item) => item._id === projectId) ?? null;
+        const normalizedProjectId = String(projectId ?? '').trim();
+        const project = projects.find((item) => item._id === normalizedProjectId) ?? null;
+
         setCreateForm((prev) => ({
             ...prev,
-            project_id: projectId,
-            project_slug: project?.slug ?? '',
+            project_id: normalizedProjectId,
+            project_slug: project?.slug ?? prev.project_slug,
+            batch_id:
+                prev.batch_id && !batches.some((batch) => batch._id === prev.batch_id && batch.project_id === normalizedProjectId)
+                    ? ''
+                    : prev.batch_id,
         }));
     };
 
     const handleCreateProduct = async () => {
-        if (!createForm.mac_address || !createForm.batch_id || !createForm.project_id || !createForm.project_slug || !createForm.model_variant) {
-            notify({ message: 'Please fill MAC, batch, project, slug, and model variant.', severity: 'warning' });
+        const macAddress = createForm.mac_address.trim().toUpperCase();
+        const batchId = createForm.batch_id.trim();
+        const projectId = createForm.project_id.trim();
+        const projectSlug = (createForm.project_slug || selectedProject?.slug || '').trim();
+        const modelVariant = createForm.model_variant.trim();
+        const manufacturedAt = new Date(createForm.manufactured_at);
+
+        const missing: string[] = [];
+        if (!macAddress) missing.push('MAC');
+        if (!batchId) missing.push('Batch');
+        if (!projectId) missing.push('Project');
+        if (!projectSlug) missing.push('Project Slug');
+        if (!modelVariant) missing.push('Model Variant');
+
+        if (missing.length > 0) {
+            notify({ message: `Please fill: ${missing.join(', ')}.`, severity: 'warning' });
+            return;
+        }
+
+        if (Number.isNaN(manufacturedAt.getTime())) {
+            notify({ message: 'Please provide a valid manufactured date.', severity: 'warning' });
             return;
         }
 
@@ -184,13 +215,17 @@ const ProductsPage = () => {
             dispatch(setLoading(true));
             await productService.createProduct({
                 ...createForm,
-                mac_address: createForm.mac_address.trim().toUpperCase(),
-                manufactured_at: new Date(createForm.manufactured_at),
-                current_stage: toBackendStage(createForm.current_stage ?? 'flashing'),
+                mac_address: macAddress,
+                batch_id: batchId,
+                project_id: projectId,
+                project_slug: projectSlug,
+                model_variant: modelVariant,
+                manufactured_at: manufacturedAt,
+                current_stage: toBackendStage(createForm.current_stage ?? 'testing'),
                 status: toBackendStatus(createForm.status ?? 'active'),
             });
 
-            const selectedBatch = batches.find((batch) => batch._id === createForm.batch_id);
+            const selectedBatch = batches.find((batch) => batch._id === batchId);
             if (selectedBatch) {
                 await batchService.updateProductionQty(selectedBatch._id, selectedBatch.produced_qty + 1);
             }
@@ -243,7 +278,10 @@ const ProductsPage = () => {
                     canCreateProduct
                         ? {
                               label: 'Register Product',
-                              onClick: () => setOpenCreateDialog(true),
+                              onClick: () => {
+                                  setCreateForm(defaultCreateForm);
+                                  setOpenCreateDialog(true);
+                              },
                           }
                         : undefined
                 }
@@ -369,13 +407,13 @@ const ProductsPage = () => {
                         fullWidth
                         displayEmpty
                         value={createForm.batch_id}
-                        onChange={(event) => handleBatchChange(event.target.value)}
+                        onChange={(event) => handleBatchChange(String(event.target.value))}
                         sx={{ mt: 2 }}
                     >
                         <MenuItem value="">Select Batch</MenuItem>
-                        {batches.map((batch) => (
+                        {availableBatches.map((batch) => (
                             <MenuItem key={batch._id} value={batch._id}>
-                                {batch._id} ({batch.model_variant})
+                                {batch._id} - {batch.batch_name || 'Unnamed'} ({batch.model_variant})
                             </MenuItem>
                         ))}
                     </Select>
@@ -384,7 +422,7 @@ const ProductsPage = () => {
                         fullWidth
                         displayEmpty
                         value={createForm.project_id}
-                        onChange={(event) => handleProjectChange(event.target.value)}
+                        onChange={(event) => handleProjectChange(String(event.target.value))}
                         sx={{ mt: 2 }}
                     >
                         <MenuItem value="">Select Project</MenuItem>
@@ -425,7 +463,7 @@ const ProductsPage = () => {
                     <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, mt: 1 }}>
                         <Select
                             fullWidth
-                            value={createForm.current_stage ?? 'flashing'}
+                            value={createForm.current_stage ?? 'testing'}
                             onChange={(event) => setCreateForm((prev) => ({ ...prev, current_stage: event.target.value as ProductStage }))}
                         >
                             {BACKEND_PRODUCT_STAGE_OPTIONS.map((stage) => (

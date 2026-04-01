@@ -62,7 +62,7 @@ const BatchDetailsPage = () => {
         <Box>
             <PageHeader
                 title={batch ? `Batch ${batch._id}` : 'Batch Details'}
-                subtitle={batch ? `${batch.model_variant} • ${toTitle(batch.status)}` : 'Inspect batch metadata and product units.'}
+                subtitle={batch ? `${batch.batch_name || 'Unnamed Batch'} • ${batch.model_variant} • ${toTitle(batch.status)}` : 'Inspect batch metadata and product units.'}
                 onRefresh={loadBatchDetails}
                 isRefreshing={isLoading}
             />
@@ -73,6 +73,10 @@ const BatchDetailsPage = () => {
                 <Card sx={{ mb: 3 }}>
                     <CardContent>
                         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2 }}>
+                            <Box>
+                                <Typography color="text.secondary">Batch Name</Typography>
+                                <Typography sx={{ fontWeight: 700 }}>{batch.batch_name || '-'}</Typography>
+                            </Box>
                             <Box>
                                 <Typography color="text.secondary">Project ID</Typography>
                                 <Typography sx={{ fontWeight: 700 }}>{batch.project_id}</Typography>

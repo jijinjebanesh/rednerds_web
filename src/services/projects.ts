@@ -9,12 +9,27 @@ interface ProjectsListResponse extends ApiResponse<Project[]> {
     };
 }
 
+const mapProject = (payload: any): Project => {
+    const source = payload ?? {};
+    return {
+        _id: String(source._id ?? source.project_id ?? source.id ?? ''),
+        name: String(source.name ?? ''),
+        slug: String(source.slug ?? source.project_slug ?? ''),
+        description: source.description ?? '',
+        status: source.status ?? 'development',
+        createdAt: source.createdAt ?? source.created_at,
+        updatedAt: source.updatedAt ?? source.updated_at,
+        created_at: source.created_at ?? source.createdAt,
+        updated_at: source.updated_at ?? source.updatedAt,
+    };
+};
+
 const toPaginatedProjects = (
     payload: ProjectsListResponse,
     fallbackPage: number,
     fallbackLimit: number
 ): PaginatedResponse<Project> => {
-    const items = Array.isArray(payload.data) ? payload.data : [];
+    const items = Array.isArray(payload.data) ? payload.data.map(mapProject) : [];
     const total = payload.pagination?.total ?? items.length;
     const limit = payload.pagination?.limit ?? fallbackLimit;
     const skip = payload.pagination?.skip ?? (fallbackPage - 1) * limit;
@@ -32,7 +47,7 @@ const toPaginatedProjects = (
 export const projectService = {
     async createProject(formData: CreateProjectForm): Promise<Project> {
         const response = await apiClient.post<ApiResponse<Project>>('/projects', formData);
-        return response.data.data;
+        return mapProject(response.data.data);
     },
 
     async getProjects(page = 1, limit = 50, status?: string): Promise<PaginatedResponse<Project>> {
@@ -47,17 +62,17 @@ export const projectService = {
 
     async getProjectById(id: string): Promise<Project> {
         const response = await apiClient.get<ApiResponse<Project>>(`/projects/${id}`);
-        return response.data.data;
+        return mapProject(response.data.data);
     },
 
     async getProjectBySlug(slug: string): Promise<Project> {
         const response = await apiClient.get<ApiResponse<Project>>(`/projects/slug/${slug}`);
-        return response.data.data;
+        return mapProject(response.data.data);
     },
 
     async updateProject(id: string, formData: Partial<CreateProjectForm>): Promise<Project> {
         const response = await apiClient.put<ApiResponse<Project>>(`/projects/${id}`, formData);
-        return response.data.data;
+        return mapProject(response.data.data);
     },
 
     async deleteProject(id: string): Promise<void> {

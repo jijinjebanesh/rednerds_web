@@ -230,6 +230,7 @@ const ProjectDetailsPage = () => {
                             <TableHead sx={{ bgcolor: '#f5f5f5' }}>
                                 <TableRow>
                                     <TableCell sx={{ fontWeight: 'bold' }}>Batch ID</TableCell>
+                                    <TableCell sx={{ fontWeight: 'bold' }}>Batch Name</TableCell>
                                     <TableCell sx={{ fontWeight: 'bold' }}>Variant</TableCell>
                                     <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
                                     <TableCell sx={{ fontWeight: 'bold' }}>Planned</TableCell>
@@ -239,7 +240,7 @@ const ProjectDetailsPage = () => {
                             <TableBody>
                                 {batches.length === 0 && !isLoading && (
                                     <TableRow>
-                                        <TableCell colSpan={5} sx={{ py: 3 }}>
+                                        <TableCell colSpan={6} sx={{ py: 3 }}>
                                             <Typography color="text.secondary">No batches found for this project.</Typography>
                                         </TableCell>
                                     </TableRow>
@@ -248,6 +249,7 @@ const ProjectDetailsPage = () => {
                                 {batches.map((batch) => (
                                     <TableRow key={batch._id} hover>
                                         <TableCell>{batch._id}</TableCell>
+                                        <TableCell>{batch.batch_name || '-'}</TableCell>
                                         <TableCell>{batch.model_variant}</TableCell>
                                         <TableCell>{toTitle(batch.status)}</TableCell>
                                         <TableCell>{batch.planned_qty}</TableCell>

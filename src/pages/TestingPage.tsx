@@ -1,6 +1,7 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     Alert,
+    Autocomplete,
     Box,
     Button,
     Chip,
@@ -23,22 +24,23 @@ import {
 } from '@mui/material';
 import PageHeader from '@/components/PageHeader';
 import PageFeedback from '@/components/PageFeedback';
-import { productService, testLogService } from '@/services';
-import { Product, TestLog } from '@/types';
+import { debugSessionService, productService, testLogService, userService } from '@/services';
+import { DebugSession, Product, TestLog } from '@/types';
 import { useAppSelector } from '@/hooks/redux';
 import { useAppUI } from '@/context/AppUIContext';
 import { TEST_RESULT_OPTIONS, toTitle } from '@/utils/workflowOptions';
+import { hasPermission } from '@/utils/rbac';
 
 interface TestFormState {
-    mac_address: string;
     station: string;
     result: TestLog['result'];
     symptoms: string;
     notes: string;
 }
 
+type QueueSource = 'fresh' | 'retest';
+
 const defaultForm: TestFormState = {
-    mac_address: '',
     station: '',
     result: 'pass',
     symptoms: '',
@@ -76,8 +78,12 @@ const getDateBoundary = (range: string): { start: Date; end: Date } | null => {
 const TestingPage = () => {
     const { user } = useAppSelector((state) => state.auth);
     const { notify } = useAppUI();
+    const canWriteTestLogs =
+        hasPermission(user?.role, 'testing.create') || hasPermission(user?.role, 'testing.update');
 
     const [testLogs, setTestLogs] = useState<TestLog[]>([]);
+    const [testingProducts, setTestingProducts] = useState<Product[]>([]);
+    const [debugSessions, setDebugSessions] = useState<DebugSession[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -94,13 +100,45 @@ const TestingPage = () => {
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [form, setForm] = useState<TestFormState>({ ...defaultForm, station: user?.assigned_station ?? '' });
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-    const [productLookupError, setProductLookupError] = useState<string | null>(null);
+    const [selectedSource, setSelectedSource] = useState<QueueSource>('fresh');
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [highlightedLogId, setHighlightedLogId] = useState<string | null>(null);
+    const [configuredStations, setConfiguredStations] = useState<string[]>([]);
 
     useEffect(() => {
-        void loadTestLogs();
+        void loadTestingData();
+    }, []);
+
+    useEffect(() => {
+        let mounted = true;
+
+        const loadConfiguredStations = async () => {
+            try {
+                const users = await userService.getUsers();
+                if (!mounted) return;
+
+                const stationsFromUsers = Array.from(
+                    new Set(
+                        users
+                            .map((entry) => (entry.assigned_station ?? '').trim())
+                            .filter(Boolean)
+                    )
+                ).sort();
+
+                setConfiguredStations(stationsFromUsers);
+            } catch {
+                if (mounted) {
+                    setConfiguredStations([]);
+                }
+            }
+        };
+
+        void loadConfiguredStations();
+
+        return () => {
+            mounted = false;
+        };
     }, []);
 
     useEffect(() => {
@@ -109,27 +147,87 @@ const TestingPage = () => {
         return () => clearTimeout(timer);
     }, [highlightedLogId]);
 
-    const loadTestLogs = async () => {
+    const loadTestingData = async () => {
         try {
             setIsLoading(true);
             setError(null);
-            const response = await testLogService.getTestLogs(1, 500);
-            setTestLogs(response.data);
+
+            const [logsRes, productsRes, debugRes] = await Promise.all([
+                testLogService.getTestLogs(1, 1000),
+                productService.getProducts(1, 1000, { current_stage: 'testing' }),
+                debugSessionService.getDebugSessions(1, 1000),
+            ]);
+
+            setTestLogs(logsRes.data);
+            setTestingProducts(productsRes.data);
+            setDebugSessions(debugRes.data);
         } catch (err: any) {
-            setError(err?.response?.data?.message || err?.message || 'Failed to load test logs');
+            setError(err?.response?.data?.message || err?.message || 'Failed to load testing data');
         } finally {
             setIsLoading(false);
         }
     };
 
+    const latestTestByProduct = useMemo(() => {
+        const map = new Map<string, TestLog>();
+        for (const log of testLogs) {
+            const existing = map.get(log.product_id);
+            if (!existing || new Date(log.tested_at).getTime() > new Date(existing.tested_at).getTime()) {
+                map.set(log.product_id, log);
+            }
+        }
+        return map;
+    }, [testLogs]);
+
+    const latestDebugByProduct = useMemo(() => {
+        const map = new Map<string, DebugSession>();
+        for (const session of debugSessions) {
+            const existing = map.get(session.product_id);
+            if (!existing || new Date(session.debugged_at).getTime() > new Date(existing.debugged_at).getTime()) {
+                map.set(session.product_id, session);
+            }
+        }
+        return map;
+    }, [debugSessions]);
+
+    const retestProductIds = useMemo(() => {
+        const ids = new Set<string>();
+
+        for (const product of testingProducts) {
+            const latestDebug = latestDebugByProduct.get(product.product_id);
+            if (!latestDebug || !latestDebug.re_test_required) continue;
+
+            const latestTest = latestTestByProduct.get(product.product_id);
+            if (!latestTest || new Date(latestDebug.debugged_at).getTime() > new Date(latestTest.tested_at).getTime()) {
+                ids.add(product.product_id);
+            }
+        }
+
+        return ids;
+    }, [latestDebugByProduct, latestTestByProduct, testingProducts]);
+
+    const freshQueue = useMemo(() => {
+        return testingProducts.filter((product) => {
+            if (retestProductIds.has(product.product_id)) return false;
+            return !latestTestByProduct.has(product.product_id);
+        });
+    }, [latestTestByProduct, retestProductIds, testingProducts]);
+
+    const retestQueue = useMemo(() => {
+        return testingProducts.filter((product) => retestProductIds.has(product.product_id));
+    }, [retestProductIds, testingProducts]);
+
     const stations = useMemo(() => {
         const values = new Set<string>();
+        for (const station of configuredStations) {
+            if (station) values.add(station);
+        }
         for (const log of testLogs) {
             if (log.station) values.add(log.station);
         }
         if (user?.assigned_station) values.add(user.assigned_station);
         return Array.from(values).sort();
-    }, [testLogs, user?.assigned_station]);
+    }, [configuredStations, testLogs, user?.assigned_station]);
 
     const filteredLogs = useMemo(() => {
         const term = search.trim().toLowerCase();
@@ -165,30 +263,53 @@ const TestingPage = () => {
         return filteredLogs.slice(start, start + rowsPerPage);
     }, [filteredLogs, page, rowsPerPage]);
 
-    const openDrawer = () => {
-        setDrawerOpen(true);
-        setForm({ ...defaultForm, station: user?.assigned_station ?? '' });
-        setSelectedProduct(null);
-        setProductLookupError(null);
-    };
+    const queueSearch = search.trim().toLowerCase();
 
-    const lookupProductByMac = async () => {
-        const mac = form.mac_address.trim().toUpperCase();
-        if (!mac) return;
+    const filteredFreshQueue = useMemo(() => {
+        if (!queueSearch) return freshQueue;
+        return freshQueue.filter((product) => {
+            return (
+                product.product_id.toLowerCase().includes(queueSearch) ||
+                product.mac_address.toLowerCase().includes(queueSearch) ||
+                product.batch_id.toLowerCase().includes(queueSearch) ||
+                product.project_id.toLowerCase().includes(queueSearch)
+            );
+        });
+    }, [freshQueue, queueSearch]);
 
-        try {
-            setProductLookupError(null);
-            const product = await productService.getProductByMac(mac);
-            setSelectedProduct(product);
-        } catch (err: any) {
-            setSelectedProduct(null);
-            setProductLookupError(err?.response?.data?.message || 'Product not found for this MAC address.');
+    const filteredRetestQueue = useMemo(() => {
+        if (!queueSearch) return retestQueue;
+        return retestQueue.filter((product) => {
+            return (
+                product.product_id.toLowerCase().includes(queueSearch) ||
+                product.mac_address.toLowerCase().includes(queueSearch) ||
+                product.batch_id.toLowerCase().includes(queueSearch) ||
+                product.project_id.toLowerCase().includes(queueSearch)
+            );
+        });
+    }, [retestQueue, queueSearch]);
+
+    const openDrawerForProduct = (product: Product, source: QueueSource) => {
+        if (!canWriteTestLogs) {
+            notify({ message: 'You do not have permission to log test results.', severity: 'error' });
+            return;
         }
+
+        const defaultStation = (user?.assigned_station ?? '').trim() || configuredStations[0] || '';
+        setSelectedProduct(product);
+        setSelectedSource(source);
+        setForm({ ...defaultForm, station: defaultStation });
+        setDrawerOpen(true);
     };
 
     const handleSubmit = async () => {
+        if (!canWriteTestLogs) {
+            notify({ message: 'You do not have permission to log test results.', severity: 'error' });
+            return;
+        }
+
         if (!selectedProduct) {
-            notify({ message: 'Select a valid product by MAC first.', severity: 'warning' });
+            notify({ message: 'Select a product from the queue first.', severity: 'warning' });
             return;
         }
 
@@ -204,6 +325,7 @@ const TestingPage = () => {
 
         try {
             setIsSubmitting(true);
+
             const created = await testLogService.createTestLog({
                 product_id: selectedProduct.product_id,
                 mac_address: selectedProduct.mac_address,
@@ -222,17 +344,17 @@ const TestingPage = () => {
             } else {
                 await productService.updateProductStage(selectedProduct.product_id, {
                     current_stage: 'testing',
-                    status: 'active',
+                    status: 'repair',
                 });
             }
 
-            setTestLogs((prev) => [created, ...prev]);
+            await loadTestingData();
             setHighlightedLogId(created._id);
             setDrawerOpen(false);
-            notify({ message: 'Test log saved.', severity: 'success' });
+            notify({ message: 'Test log saved and product status updated.', severity: 'success' });
 
             if (form.result !== 'pass') {
-                notify({ message: 'Product moved to debugging queue.', severity: 'info' });
+                notify({ message: 'Product moved out of pending test queue for debugging review.', severity: 'info' });
             }
         } catch (err: any) {
             notify({ message: err?.response?.data?.message || err?.message || 'Failed to save test log', severity: 'error' });
@@ -241,18 +363,17 @@ const TestingPage = () => {
         }
     };
 
+    const pendingCount = filteredFreshQueue.length + filteredRetestQueue.length;
+    const selectedLatestDebug = selectedProduct ? latestDebugByProduct.get(selectedProduct.product_id) ?? null : null;
+
     return (
         <Box>
             <PageHeader
                 title="Production Testing"
-                subtitle="Log functional test outcomes and route failed devices to debugging queue."
-                countLabel={`${filteredLogs.length} logs`}
-                onRefresh={loadTestLogs}
+                subtitle="Click a product from queue, log result, and product stage/status will update automatically."
+                countLabel={`${pendingCount} pending (${filteredFreshQueue.length} fresh, ${filteredRetestQueue.length} re-test)`}
+                onRefresh={loadTestingData}
                 isRefreshing={isLoading}
-                primaryAction={{
-                    label: 'Log Test Result',
-                    onClick: openDrawer,
-                }}
             />
 
             <PageFeedback isLoading={isLoading} error={error} />
@@ -280,6 +401,88 @@ const TestingPage = () => {
                     <MenuItem value="30d">Last 30 Days</MenuItem>
                     <MenuItem value="custom">Custom Range</MenuItem>
                 </Select>
+            </Box>
+
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1fr 1fr' }, gap: 2, mb: 2 }}>
+                <TableContainer component={Paper}>
+                    <Table size="small">
+                        <TableHead sx={{ bgcolor: '#f5f5f5' }}>
+                            <TableRow>
+                                <TableCell sx={{ fontWeight: 'bold' }}>Yet To Be Tested ({filteredFreshQueue.length})</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold' }}>MAC</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold' }}>Batch</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold' }}>Action</TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {filteredFreshQueue.length === 0 && (
+                                <TableRow>
+                                    <TableCell colSpan={4}>
+                                        <Typography variant="body2" color="text.secondary">
+                                            No untested products in testing stage.
+                                        </Typography>
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                            {filteredFreshQueue.map((product) => (
+                                <TableRow key={`fresh-${product.product_id}`} hover onClick={() => openDrawerForProduct(product, 'fresh')} sx={{ cursor: 'pointer' }}>
+                                    <TableCell>{product.product_id}</TableCell>
+                                    <TableCell>{product.mac_address}</TableCell>
+                                    <TableCell>{product.batch_id}</TableCell>
+                                    <TableCell onClick={(event) => event.stopPropagation()}>
+                                        <Button size="small" variant="contained" onClick={() => openDrawerForProduct(product, 'fresh')} disabled={!canWriteTestLogs}>
+                                            Log Test
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+
+                <TableContainer component={Paper}>
+                    <Table size="small">
+                        <TableHead sx={{ bgcolor: '#f5f5f5' }}>
+                            <TableRow>
+                                <TableCell sx={{ fontWeight: 'bold' }}>From Debugging (Re-test) ({filteredRetestQueue.length})</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold' }}>MAC</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold' }}>Last Debug</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold' }}>Action</TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {filteredRetestQueue.length === 0 && (
+                                <TableRow>
+                                    <TableCell colSpan={4}>
+                                        <Typography variant="body2" color="text.secondary">
+                                            No re-test products returned from debugging.
+                                        </Typography>
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                            {filteredRetestQueue.map((product) => {
+                                const latestDebug = latestDebugByProduct.get(product.product_id);
+                                return (
+                                    <TableRow
+                                        key={`retest-${product.product_id}`}
+                                        hover
+                                        onClick={() => openDrawerForProduct(product, 'retest')}
+                                        sx={{ cursor: 'pointer', borderLeft: '4px solid #ed6c02' }}
+                                    >
+                                        <TableCell>{product.product_id}</TableCell>
+                                        <TableCell>{product.mac_address}</TableCell>
+                                        <TableCell>{latestDebug ? new Date(latestDebug.debugged_at).toLocaleString() : '-'}</TableCell>
+                                        <TableCell onClick={(event) => event.stopPropagation()}>
+                                            <Button size="small" variant="contained" color="warning" onClick={() => openDrawerForProduct(product, 'retest')} disabled={!canWriteTestLogs}>
+                                                Re-test
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
             </Box>
 
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 2 }}>
@@ -386,75 +589,39 @@ const TestingPage = () => {
             <Drawer anchor="right" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
                 <Box sx={{ width: { xs: '100vw', sm: 460 }, p: 2.5 }}>
                     <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
-                        Log Test Result
+                        {selectedSource === 'retest' ? 'Log Re-test Result' : 'Log Test Result'}
                     </Typography>
-
-                    <TextField
-                        fullWidth
-                        label="MAC Address"
-                        value={form.mac_address}
-                        onChange={(event) => {
-                            setForm((prev) => ({ ...prev, mac_address: event.target.value }));
-                            setSelectedProduct(null);
-                            setProductLookupError(null);
-                        }}
-                        onBlur={lookupProductByMac}
-                        onKeyDown={(event) => {
-                            if (event.key === 'Enter') {
-                                event.preventDefault();
-                                void lookupProductByMac();
-                            }
-                        }}
-                        placeholder="A0:B7:65:00:00:1A"
-                        sx={{ mt: 1 }}
-                    />
-
-                    {productLookupError && (
-                        <Alert severity="error" sx={{ mt: 1.5 }}>
-                            {productLookupError}
-                        </Alert>
-                    )}
 
                     {selectedProduct && (
                         <Paper variant="outlined" sx={{ mt: 1.5, p: 1.5 }}>
                             <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
-                                Product Preview
+                                Product
                             </Typography>
                             <Typography variant="body2">Product: {selectedProduct.product_id}</Typography>
+                            <Typography variant="body2">MAC: {selectedProduct.mac_address}</Typography>
                             <Typography variant="body2">Batch: {selectedProduct.batch_id}</Typography>
                             <Typography variant="body2">Project: {selectedProduct.project_id}</Typography>
-                            <Typography variant="body2">Stage: {toTitle(selectedProduct.current_stage)}</Typography>
+                            <Typography variant="body2">Current Status: {toTitle(selectedProduct.status)}</Typography>
                         </Paper>
                     )}
 
-                    {selectedProduct && selectedProduct.current_stage !== 'testing' && (
-                        <Alert severity="warning" sx={{ mt: 1.5 }}>
-                            This product is currently in stage: {toTitle(selectedProduct.current_stage)}. Continue only if this is intended.
+                    {selectedSource === 'retest' && selectedLatestDebug && (
+                        <Alert severity="info" sx={{ mt: 1.5 }}>
+                            Returned from debugging on {new Date(selectedLatestDebug.debugged_at).toLocaleString()}.
                         </Alert>
                     )}
 
-                    <Select
-                        fullWidth
+                    <Autocomplete
+                        freeSolo
+                        options={stations}
                         value={form.station}
-                        onChange={(event) => setForm((prev) => ({ ...prev, station: event.target.value }))}
+                        onChange={(_, value) => setForm((prev) => ({ ...prev, station: (value ?? '').trim() }))}
+                        onInputChange={(_, value) => setForm((prev) => ({ ...prev, station: value.trimStart() }))}
                         sx={{ mt: 2 }}
-                        disabled={!selectedProduct}
-                    >
-                        <MenuItem value="">Select Station</MenuItem>
-                        {stations.map((station) => (
-                            <MenuItem key={station} value={station}>
-                                {station}
-                            </MenuItem>
-                        ))}
-                    </Select>
+                        renderInput={(params) => <TextField {...params} label="Select or Enter Station" />}
+                    />
 
-                    <Select
-                        fullWidth
-                        value={form.result}
-                        onChange={(event) => setForm((prev) => ({ ...prev, result: event.target.value as TestLog['result'] }))}
-                        sx={{ mt: 2 }}
-                        disabled={!selectedProduct}
-                    >
+                    <Select fullWidth value={form.result} onChange={(event) => setForm((prev) => ({ ...prev, result: event.target.value as TestLog['result'] }))} sx={{ mt: 2 }}>
                         {TEST_RESULT_OPTIONS.map((result) => (
                             <MenuItem key={result} value={result}>
                                 {toTitle(result)}
@@ -472,7 +639,6 @@ const TestingPage = () => {
                             value={form.symptoms}
                             onChange={(event) => setForm((prev) => ({ ...prev, symptoms: event.target.value }))}
                             sx={{ mt: 2 }}
-                            disabled={!selectedProduct}
                         />
                     )}
 
@@ -484,7 +650,6 @@ const TestingPage = () => {
                         value={form.notes}
                         onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
                         sx={{ mt: 2 }}
-                        disabled={!selectedProduct}
                     />
 
                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 }}>
@@ -502,4 +667,3 @@ const TestingPage = () => {
 };
 
 export default TestingPage;
-

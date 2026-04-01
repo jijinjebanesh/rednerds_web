@@ -18,6 +18,10 @@ class ApiClient {
     private tokenKey = 'auth_token';
     private refreshTokenKey = 'refresh_token';
 
+    private formatAuthorizationHeader(token: string): string {
+        return token.replace(/^Bearer\s+/i, '');
+    }
+
     constructor() {
         this.client = axios.create({
             baseURL: `${API_BASE_URL}/api/v1`,
@@ -31,7 +35,7 @@ class ApiClient {
             (config) => {
                 const token = this.getToken();
                 if (token) {
-                    config.headers.Authorization = token;
+                    config.headers.Authorization = this.formatAuthorizationHeader(token);
                 }
                 return config;
             },
@@ -56,7 +60,7 @@ class ApiClient {
                                 this.setRefreshToken(response.refreshToken);
                             }
 
-                            originalRequest.headers.Authorization = response.token;
+                            originalRequest.headers.Authorization = this.formatAuthorizationHeader(response.token);
                             return this.client(originalRequest);
                         } catch (refreshError) {
                             this.clearTokens();
