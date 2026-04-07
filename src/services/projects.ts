@@ -17,6 +17,7 @@ const mapProject = (payload: any): Project => {
         slug: String(source.slug ?? source.project_slug ?? ''),
         description: source.description ?? '',
         status: source.status ?? 'development',
+        project_type: source.project_type === 'accessory' ? 'accessory' : 'device',
         createdAt: source.createdAt ?? source.created_at,
         updatedAt: source.updatedAt ?? source.updated_at,
         created_at: source.created_at ?? source.createdAt,
@@ -50,11 +51,12 @@ export const projectService = {
         return mapProject(response.data.data);
     },
 
-    async getProjects(page = 1, limit = 50, status?: string): Promise<PaginatedResponse<Project>> {
+    async getProjects(page = 1, limit = 50, status?: string, project_type?: string): Promise<PaginatedResponse<Project>> {
         const params = new URLSearchParams();
         params.append('skip', String((page - 1) * limit));
         params.append('limit', String(limit));
         if (status) params.append('status', status);
+        if (project_type) params.append('project_type', project_type);
 
         const response = await apiClient.get<ProjectsListResponse>(`/projects?${params}`);
         return toPaginatedProjects(response.data, page, limit);

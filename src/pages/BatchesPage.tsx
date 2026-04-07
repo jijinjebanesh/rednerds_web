@@ -36,7 +36,11 @@ const getProgress = (produced: number, planned: number) => {
     return Math.min(100, Math.round((produced / planned) * 100));
 };
 
-const defaultCreateForm: CreateBatchForm = {
+interface CreateBatchFormState extends Omit<CreateBatchForm, 'planned_qty'> {
+    planned_qty: number | '';
+}
+
+const defaultCreateForm: CreateBatchFormState = {
     _id: '',
     batch_name: '',
     project_id: '',
@@ -61,7 +65,7 @@ const BatchesPage = () => {
     const [rowsPerPage, setRowsPerPage] = useState(25);
 
     const [openCreateDialog, setOpenCreateDialog] = useState(false);
-    const [createForm, setCreateForm] = useState<CreateBatchForm>(defaultCreateForm);
+    const [createForm, setCreateForm] = useState<CreateBatchFormState>(defaultCreateForm);
 
     const [editingBatch, setEditingBatch] = useState<Batch | null>(null);
     const [editProducedQty, setEditProducedQty] = useState<number>(0);
@@ -93,6 +97,10 @@ const BatchesPage = () => {
             );
         });
     }, [batches, search]);
+
+    const deviceProjects = useMemo(() => {
+        return projects.filter((project) => (project.project_type || 'device') === 'device');
+    }, [projects]);
 
     const loadProjects = async () => {
         try {
@@ -133,12 +141,24 @@ const BatchesPage = () => {
             return;
         }
 
+        const selectedProject = projects.find((project) => project._id === createForm.project_id);
+        if (!selectedProject || (selectedProject.project_type || 'device') !== 'device') {
+            notify({ message: 'Batches can be created only for device projects. Use Accessory Workflow for accessory targets.', severity: 'warning' });
+            return;
+        }
+
+        const plannedQty = Number(createForm.planned_qty);
+        if (!Number.isFinite(plannedQty) || plannedQty < 1) {
+            notify({ message: 'Planned quantity must be at least 1.', severity: 'warning' });
+            return;
+        }
+
         try {
             dispatch(setLoading(true));
             await batchService.createBatch({
                 ...createForm,
                 batch_name: createForm.batch_name.trim(),
-                planned_qty: Math.max(1, Number(createForm.planned_qty || 0)),
+                planned_qty: Math.max(1, plannedQty),
                 start_date: new Date(createForm.start_date),
                 notes: createForm.notes?.trim() || undefined,
             });
@@ -358,12 +378,15 @@ const BatchesPage = () => {
                         displayEmpty
                     >
                         <MenuItem value="">Select Project</MenuItem>
-                        {projects.map((project) => (
+                        {deviceProjects.map((project) => (
                             <MenuItem key={project._id} value={project._id}>
                                 {project.name} ({project.slug})
                             </MenuItem>
                         ))}
                     </Select>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                        Only device projects are shown here. Accessory projects use Accessory Workflow target quantities.
+                    </Typography>
 
                     <TextField
                         fullWidth
@@ -380,7 +403,13 @@ const BatchesPage = () => {
                         type="number"
                         inputProps={{ min: 1 }}
                         value={createForm.planned_qty}
-                        onChange={(event) => setCreateForm((prev) => ({ ...prev, planned_qty: Number(event.target.value) || 1 }))}
+                        onChange={(event) => {
+                            const raw = event.target.value;
+                            setCreateForm((prev) => ({
+                                ...prev,
+                                planned_qty: raw === '' ? '' : Number(raw),
+                            }));
+                        }}
                     />
 
                     <TextField

@@ -1,6 +1,7 @@
-﻿import { ProductStage, ProductStatus, UserRole } from '@/types';
+import { ProductStage, ProductStatus, ProjectType, UserRole } from '@/types';
 
 export const PROJECT_STATUS_OPTIONS = ['active', 'discontinued', 'development'] as const;
+export const PROJECT_TYPE_OPTIONS: ProjectType[] = ['device', 'accessory'];
 export const BATCH_STATUS_OPTIONS = ['planned', 'in_progress', 'completed', 'cancelled'] as const;
 export const TEST_RESULT_OPTIONS = ['pass', 'fail', 'partial'] as const;
 export const DEBUG_RESOLUTION_OPTIONS = ['resolved', 'unresolved', 'partially_resolved', 'scrapped'] as const;
@@ -75,4 +76,5 @@ export const toDateInputValue = (value?: Date | string | null): string => {
     if (Number.isNaN(date.getTime())) return '';
     return date.toISOString().split('T')[0];
 };
+
 

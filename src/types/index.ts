@@ -42,12 +42,15 @@ export interface LoginRequest {
 }
 
 // Project Types
+export type ProjectType = 'device' | 'accessory';
+
 export interface Project {
     _id: string;
     name: string;
     slug: string;
     description?: string;
     status: 'active' | 'discontinued' | 'development';
+    project_type: ProjectType;
     createdAt?: Date | string;
     updatedAt?: Date | string;
     created_at?: Date | string;
@@ -75,6 +78,15 @@ export interface Batch {
 
 export type ProductStage = 'flashing' | 'testing' | 'debugging' | 'qc' | 'stock' | 'shipped' | 'repair' | 'customer';
 export type ProductStatus = 'shipped' | 'repair' | 'returned' | 'active' | 'scrapped';
+export type ProductQualityGrade = 'A' | 'B' | 'C' | 'D' | 'SCRAP';
+
+export interface ProductQualityGradeHistoryEntry {
+    quality_grade: ProductQualityGrade;
+    graded_by_user_id: string;
+    graded_by_name?: string | null;
+    graded_by_email?: string | null;
+    graded_at: Date | string;
+}
 
 // Product Types
 export interface Product {
@@ -86,6 +98,12 @@ export interface Product {
     project_slug: string;
     model_variant: string;
     current_stage: ProductStage;
+    quality_grade?: ProductQualityGrade | null;
+    quality_graded_by?: string | null;
+    quality_graded_by_name?: string | null;
+    quality_graded_by_email?: string | null;
+    quality_graded_at?: Date | string | null;
+    quality_grade_history?: ProductQualityGradeHistoryEntry[];
     manufactured_at: Date | string;
     status: ProductStatus;
     customer_id?: string;
@@ -190,6 +208,7 @@ export interface CreateProjectForm {
     slug: string;
     description?: string;
     status: 'active' | 'discontinued' | 'development';
+    project_type: ProjectType;
 }
 
 export interface CreateBatchForm {

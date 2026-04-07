@@ -17,6 +17,8 @@ import DebuggingPage from '@/pages/DebuggingPage';
 import RepairsPage from '@/pages/RepairsPage';
 import RepairDetailsPage from '@/pages/RepairDetailsPage';
 import UsersPage from '@/pages/UsersPage';
+import QualityGradingPage from '@/pages/QualityGradingPage';
+import AccessoryWorkflowPage from '@/pages/AccessoryWorkflowPage';
 
 function App() {
     return (
@@ -122,6 +124,26 @@ function App() {
                             element={
                                 <ProtectedRoute>
                                     <RepairDetailsPage />
+                                </ProtectedRoute>
+                            }
+                        />
+
+                        <Route
+                            path="/quality/grading"
+                            element={
+                                <ProtectedRoute allowedRoles={['quality_engineer']}>
+                                    <QualityGradingPage />
+                                </ProtectedRoute>
+                            }
+                        />
+
+                        <Route
+                            path="/accessories/workflows"
+                            element={
+                                <ProtectedRoute
+                                    allowedRoles={['admin', 'production_manager', 'manager', 'test_operator', 'debug_technician', 'technician', 'quality_engineer']}
+                                >
+                                    <AccessoryWorkflowPage />
                                 </ProtectedRoute>
                             }
                         />

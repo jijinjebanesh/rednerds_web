@@ -8,6 +8,8 @@ export type AppRouteKey =
     | 'testing'
     | 'debugging'
     | 'repairs'
+    | 'quality_grading'
+    | 'accessory_workflows'
     | 'users';
 
 export type AppPermission =
@@ -26,19 +28,23 @@ export type AppPermission =
     | 'debugging.update'
     | 'repairs.create'
     | 'repairs.update'
+    | 'accessory.target.create'
+    | 'accessory.testing.log'
+    | 'accessory.debug.log'
+    | 'accessory.qc.log'
     | 'users.manage';
 
 const ROLE_ROUTE_ACCESS: Record<UserRole, AppRouteKey[]> = {
-    admin: ['dashboard', 'projects', 'batches', 'products', 'testing', 'debugging', 'repairs', 'users'],
-    production_manager: ['dashboard', 'projects', 'batches', 'products', 'testing', 'debugging', 'repairs'],
+    admin: ['dashboard', 'projects', 'batches', 'products', 'testing', 'debugging', 'repairs', 'quality_grading', 'accessory_workflows', 'users'],
+    production_manager: ['dashboard', 'projects', 'batches', 'products', 'testing', 'debugging', 'repairs', 'accessory_workflows'],
     flash_operator: ['dashboard', 'products'],
-    test_operator: ['dashboard', 'products', 'testing', 'debugging'],
-    debug_technician: ['dashboard', 'products', 'testing', 'debugging'],
+    test_operator: ['dashboard', 'products', 'testing', 'debugging', 'accessory_workflows'],
+    debug_technician: ['dashboard', 'products', 'testing', 'debugging', 'accessory_workflows'],
     repair_technician: ['dashboard', 'products', 'repairs'],
-    manager: ['dashboard', 'projects', 'batches', 'products', 'testing', 'debugging', 'repairs'],
+    manager: ['dashboard', 'projects', 'batches', 'products', 'testing', 'debugging', 'repairs', 'accessory_workflows'],
     operator: ['dashboard', 'products', 'testing'],
-    technician: ['dashboard', 'products', 'debugging', 'repairs'],
-    quality_engineer: ['dashboard', 'products', 'testing', 'debugging'],
+    technician: ['dashboard', 'products', 'debugging', 'repairs', 'accessory_workflows'],
+    quality_engineer: ['dashboard', 'products', 'testing', 'debugging', 'quality_grading', 'accessory_workflows'],
     user: ['dashboard'],
 };
 
@@ -59,6 +65,10 @@ const ROLE_PERMISSIONS: Record<UserRole, AppPermission[]> = {
         'debugging.update',
         'repairs.create',
         'repairs.update',
+        'accessory.target.create',
+        'accessory.testing.log',
+        'accessory.debug.log',
+        'accessory.qc.log',
         'users.manage',
     ],
     production_manager: [
@@ -71,10 +81,11 @@ const ROLE_PERMISSIONS: Record<UserRole, AppPermission[]> = {
         'testing.update',
         'debugging.update',
         'repairs.update',
+        'accessory.target.create',
     ],
     flash_operator: ['products.create', 'products.update'],
-    test_operator: ['testing.create', 'testing.update'],
-    debug_technician: ['debugging.create', 'debugging.update'],
+    test_operator: ['testing.create', 'testing.update', 'accessory.testing.log'],
+    debug_technician: ['debugging.create', 'debugging.update', 'accessory.debug.log'],
     repair_technician: ['repairs.create', 'repairs.update'],
     manager: [
         'projects.create',
@@ -86,10 +97,11 @@ const ROLE_PERMISSIONS: Record<UserRole, AppPermission[]> = {
         'testing.update',
         'debugging.update',
         'repairs.update',
+        'accessory.target.create',
     ],
     operator: ['testing.create', 'testing.update'],
-    technician: ['debugging.create', 'debugging.update', 'repairs.create', 'repairs.update'],
-    quality_engineer: ['testing.create', 'testing.update', 'debugging.update'],
+    technician: ['debugging.create', 'debugging.update', 'repairs.create', 'repairs.update', 'accessory.debug.log'],
+    quality_engineer: ['testing.create', 'testing.update', 'debugging.update', 'accessory.qc.log'],
     user: [],
 };
 

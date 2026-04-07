@@ -44,6 +44,7 @@ const initialForm: ProjectFormState = {
     slug: '',
     description: '',
     status: 'active',
+    project_type: 'device',
 };
 
 const ProjectsPage = () => {
@@ -58,6 +59,7 @@ const ProjectsPage = () => {
     const [searchInput, setSearchInput] = useState(searchParams.get('q') ?? '');
     const [debouncedSearch, setDebouncedSearch] = useState(searchParams.get('q') ?? '');
     const [statusFilter, setStatusFilter] = useState<string>(searchParams.get('status') ?? 'all');
+    const [projectTypeFilter, setProjectTypeFilter] = useState<string>(searchParams.get('project_type') ?? 'all');
     const [page, setPage] = useState(Math.max(0, Number(searchParams.get('page') ?? '1') - 1));
     const [rowsPerPage, setRowsPerPage] = useState(Number(searchParams.get('limit') ?? '20'));
 
@@ -91,13 +93,14 @@ const ProjectsPage = () => {
 
         if (statusFilter !== 'all') params.status = statusFilter;
         if (searchInput.trim()) params.q = searchInput.trim();
+        if (projectTypeFilter !== 'all') params.project_type = projectTypeFilter;
 
         setSearchParams(params, { replace: true });
-    }, [page, rowsPerPage, statusFilter, searchInput, setSearchParams]);
+    }, [page, rowsPerPage, statusFilter, searchInput, projectTypeFilter, setSearchParams]);
 
     useEffect(() => {
         loadProjects();
-    }, [page, rowsPerPage, statusFilter, debouncedSearch]);
+    }, [page, rowsPerPage, statusFilter, debouncedSearch, projectTypeFilter]);
 
     useEffect(() => {
         if (!highlightedProjectId) return;
@@ -113,7 +116,8 @@ const ProjectsPage = () => {
             return (
                 project.name.toLowerCase().includes(term) ||
                 project.slug.toLowerCase().includes(term) ||
-                project.status.toLowerCase().includes(term)
+                project.status.toLowerCase().includes(term) ||
+                project.project_type.toLowerCase().includes(term)
             );
         });
     }, [projects, debouncedSearch]);
@@ -121,7 +125,12 @@ const ProjectsPage = () => {
     const loadProjects = async () => {
         try {
             dispatch(setLoading(true));
-            const response = await projectService.getProjects(page + 1, rowsPerPage, statusFilter === 'all' ? undefined : statusFilter);
+            const response = await projectService.getProjects(
+                page + 1,
+                rowsPerPage,
+                statusFilter === 'all' ? undefined : statusFilter,
+                projectTypeFilter === 'all' ? undefined : projectTypeFilter
+            );
             dispatch(setProjects(response));
             dispatch(clearError());
         } catch (err: any) {
@@ -165,6 +174,7 @@ const ProjectsPage = () => {
             slug: project.slug,
             description: project.description ?? '',
             status: project.status,
+            project_type: project.project_type ?? 'device',
         });
         setDialogOpen(true);
     };
@@ -188,6 +198,7 @@ const ProjectsPage = () => {
                     slug: form.slug,
                     description: form.description,
                     status: form.status,
+                    project_type: form.project_type,
                 });
                 notify({ message: 'Project updated successfully.', severity: 'success' });
                 setHighlightedProjectId(editingProjectId);
@@ -198,6 +209,7 @@ const ProjectsPage = () => {
                     slug: form.slug,
                     description: form.description,
                     status: form.status,
+                    project_type: form.project_type,
                 });
                 notify({ message: 'Project created successfully.', severity: 'success' });
                 setHighlightedProjectId(form._id);
@@ -255,10 +267,10 @@ const ProjectsPage = () => {
 
             <PageFeedback isLoading={isLoading} error={error || null} />
 
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' }, gap: 1.5, mb: 2 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr 1fr' }, gap: 1.5, mb: 2 }}>
                 <TextField
                     fullWidth
-                    placeholder="Search by name, slug, or status"
+                    placeholder="Search by name, slug, status, or project type"
                     value={searchInput}
                     onChange={(event) => setSearchInput(event.target.value)}
                 />
@@ -275,11 +287,27 @@ const ProjectsPage = () => {
                     size="small"
                 >
                     <ToggleButton value="all">All</ToggleButton>
-                    {PROJECT_STATUS_OPTIONS.map((status) => (
-                        <ToggleButton key={status} value={status}>
-                            {toTitle(status)}
-                        </ToggleButton>
-                    ))}
+                        {PROJECT_STATUS_OPTIONS.map((status) => (
+                            <ToggleButton key={status} value={status}>
+                                {toTitle(status)}
+                            </ToggleButton>
+                        ))}
+                    </ToggleButtonGroup>
+
+                <ToggleButtonGroup
+                    fullWidth
+                    value={projectTypeFilter}
+                    exclusive
+                    onChange={(_, nextValue) => {
+                        if (!nextValue) return;
+                        setProjectTypeFilter(nextValue);
+                        setPage(0);
+                    }}
+                    size="small"
+                >
+                    <ToggleButton value="all">All Types</ToggleButton>
+                    <ToggleButton value="device">Device</ToggleButton>
+                    <ToggleButton value="accessory">Accessory</ToggleButton>
                 </ToggleButtonGroup>
             </Box>
 
@@ -289,6 +317,7 @@ const ProjectsPage = () => {
                         <TableRow>
                             <TableCell sx={{ fontWeight: 'bold' }}>Name</TableCell>
                             <TableCell sx={{ fontWeight: 'bold' }}>Slug</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Type</TableCell>
                             <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
                             <TableCell sx={{ fontWeight: 'bold' }}>Description</TableCell>
                             <TableCell sx={{ fontWeight: 'bold', width: 64 }} />
@@ -297,7 +326,7 @@ const ProjectsPage = () => {
                     <TableBody>
                         {filteredProjects.length === 0 && !isLoading && (
                             <TableRow>
-                                <TableCell colSpan={5} sx={{ py: 3 }}>
+                                <TableCell colSpan={6} sx={{ py: 3 }}>
                                     <Typography color="text.secondary">No projects found.</Typography>
                                 </TableCell>
                             </TableRow>
@@ -316,6 +345,7 @@ const ProjectsPage = () => {
                             >
                                 <TableCell>{project.name}</TableCell>
                                 <TableCell>{project.slug}</TableCell>
+                                <TableCell>{toTitle(project.project_type || 'device')}</TableCell>
                                 <TableCell>{toTitle(project.status)}</TableCell>
                                 <TableCell>{project.description || '-'}</TableCell>
                                 <TableCell onClick={(event) => event.stopPropagation()}>
@@ -422,12 +452,26 @@ const ProjectsPage = () => {
                     <ToggleButtonGroup
                         fullWidth
                         exclusive
+                        value={form.project_type}
+                        onChange={(_, nextValue) => {
+                            if (!nextValue) return;
+                            setForm((prev) => ({ ...prev, project_type: nextValue }));
+                        }}
+                        sx={{ mt: 1 }}
+                    >
+                        <ToggleButton value="device">Device Project</ToggleButton>
+                        <ToggleButton value="accessory">Accessory Project</ToggleButton>
+                    </ToggleButtonGroup>
+
+                    <ToggleButtonGroup
+                        fullWidth
+                        exclusive
                         value={form.status}
                         onChange={(_, nextValue) => {
                             if (!nextValue) return;
                             setForm((prev) => ({ ...prev, status: nextValue }));
                         }}
-                        sx={{ mt: 1 }}
+                        sx={{ mt: 1.5 }}
                     >
                         {PROJECT_STATUS_OPTIONS.map((status) => (
                             <ToggleButton key={status} value={status}>

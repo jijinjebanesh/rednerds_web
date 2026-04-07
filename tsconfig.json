@@ -21,31 +21,30 @@
         "noUnusedLocals": true,
         "noUnusedParameters": true,
         "noFallthroughCasesInSwitch": true,
-        "baseUrl": ".",
         "paths": {
             "@/*": [
-                "src/*"
+                "./src/*"
             ],
             "@components/*": [
-                "src/components/*"
+                "./src/components/*"
             ],
             "@features/*": [
-                "src/features/*"
+                "./src/features/*"
             ],
             "@services/*": [
-                "src/services/*"
+                "./src/services/*"
             ],
             "@store/*": [
-                "src/store/*"
+                "./src/store/*"
             ],
             "@types/*": [
-                "src/types/*"
+                "./src/types/*"
             ],
             "@utils/*": [
-                "src/utils/*"
+                "./src/utils/*"
             ],
             "@hooks/*": [
-                "src/hooks/*"
+                "./src/hooks/*"
             ]
         }
     },

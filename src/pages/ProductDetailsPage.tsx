@@ -21,7 +21,7 @@ import {
 import PageHeader from '@/components/PageHeader';
 import PageFeedback from '@/components/PageFeedback';
 import { customerRepairService, debugSessionService, repairSessionService, testLogService, productService } from '@/services';
-import { CustomerRepair, DebugSession, Product, RepairSession, TestLog } from '@/types';
+import { CustomerRepair, DebugSession, Product, ProductQualityGradeHistoryEntry, RepairSession, TestLog } from '@/types';
 import { toTitle } from '@/utils/workflowOptions';
 
 interface EventRow {
@@ -31,6 +31,15 @@ interface EventRow {
     station?: string;
     payload: Record<string, unknown>;
 }
+
+const getQualityGradeColor = (
+    grade?: Product['quality_grade']
+): 'default' | 'success' | 'warning' | 'error' => {
+    if (grade === 'SCRAP') return 'error';
+    if (grade === 'A' || grade === 'B') return 'success';
+    if (grade === 'C' || grade === 'D') return 'warning';
+    return 'default';
+};
 
 const ProductDetailsPage = () => {
     const navigate = useNavigate();
@@ -154,6 +163,32 @@ const ProductDetailsPage = () => {
         return rows.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
     }, [debugSessions, repairSessions, repairs, testLogs]);
 
+    const qualityHistory = useMemo<ProductQualityGradeHistoryEntry[]>(() => {
+        if (!product) return [];
+
+        const entries = [...(product.quality_grade_history ?? [])].sort(
+            (a, b) => new Date(b.graded_at).getTime() - new Date(a.graded_at).getTime()
+        );
+
+        if (entries.length > 0) {
+            return entries;
+        }
+
+        if (product.quality_grade && product.quality_graded_at) {
+            return [
+                {
+                    quality_grade: product.quality_grade,
+                    graded_by_user_id: product.quality_graded_by ?? '-',
+                    graded_by_name: product.quality_graded_by_name ?? null,
+                    graded_by_email: product.quality_graded_by_email ?? null,
+                    graded_at: product.quality_graded_at,
+                },
+            ];
+        }
+
+        return [];
+    }, [product]);
+
     return (
         <Box>
             <PageHeader
@@ -180,6 +215,11 @@ const ProductDetailsPage = () => {
                                 <Box sx={{ display: 'flex', gap: 1 }}>
                                     <Chip label={toTitle(product.current_stage)} color="warning" />
                                     <Chip label={toTitle(product.status)} color="success" />
+                                    <Chip
+                                        label={product.quality_grade ? `Grade ${product.quality_grade}` : 'Grade -'}
+                                        color={getQualityGradeColor(product.quality_grade)}
+                                        variant={product.quality_grade ? 'filled' : 'outlined'}
+                                    />
                                     <Button size="small" onClick={() => navigate(`/manufacturing/batches/${product.batch_id}`)}>
                                         View in Batch
                                     </Button>
@@ -206,6 +246,25 @@ const ProductDetailsPage = () => {
                                     </Typography>
                                 </Box>
                             </Box>
+
+                            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2, mt: 2 }}>
+                                <Box>
+                                    <Typography color="text.secondary">Quality Grade</Typography>
+                                    <Typography sx={{ fontWeight: 700 }}>{product.quality_grade || '-'}</Typography>
+                                </Box>
+                                <Box>
+                                    <Typography color="text.secondary">Graded By</Typography>
+                                    <Typography sx={{ fontWeight: 700 }}>
+                                        {product.quality_graded_by_name || product.quality_graded_by_email || product.quality_graded_by || '-'}
+                                    </Typography>
+                                </Box>
+                                <Box>
+                                    <Typography color="text.secondary">Graded At</Typography>
+                                    <Typography sx={{ fontWeight: 700 }}>
+                                        {product.quality_graded_at ? new Date(product.quality_graded_at).toLocaleString() : '-'}
+                                    </Typography>
+                                </Box>
+                            </Box>
                         </CardContent>
                     </Card>
 
@@ -215,6 +274,7 @@ const ProductDetailsPage = () => {
                             <Tab label={`Debug Sessions (${debugSessions.length})`} />
                             <Tab label={`Repair Cases (${repairs.length})`} />
                             <Tab label={`Events (${events.length})`} />
+                            <Tab label={`Quality History (${qualityHistory.length})`} />
                         </Tabs>
 
                         <Box sx={{ p: 2 }}>
@@ -397,6 +457,43 @@ const ProductDetailsPage = () => {
                                         ))
                                     )}
                                 </Stack>
+                            )}
+
+                            {activeTab === 4 && (
+                                <Box>
+                                    {qualityHistory.length === 0 ? (
+                                        <Typography color="text.secondary">No quality grading history available.</Typography>
+                                    ) : (
+                                        <TableContainer>
+                                            <Table>
+                                                <TableHead sx={{ bgcolor: '#f5f5f5' }}>
+                                                    <TableRow>
+                                                        <TableCell sx={{ fontWeight: 700 }}>Grade</TableCell>
+                                                        <TableCell sx={{ fontWeight: 700 }}>Graded By</TableCell>
+                                                        <TableCell sx={{ fontWeight: 700 }}>User ID</TableCell>
+                                                        <TableCell sx={{ fontWeight: 700 }}>Time</TableCell>
+                                                    </TableRow>
+                                                </TableHead>
+                                                <TableBody>
+                                                    {qualityHistory.map((entry, index) => (
+                                                        <TableRow key={`${entry.graded_by_user_id}-${entry.graded_at}-${index}`}>
+                                                            <TableCell>
+                                                                <Chip
+                                                                    size="small"
+                                                                    label={entry.quality_grade}
+                                                                    color={getQualityGradeColor(entry.quality_grade)}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell>{entry.graded_by_name || entry.graded_by_email || '-'}</TableCell>
+                                                            <TableCell>{entry.graded_by_user_id}</TableCell>
+                                                            <TableCell>{new Date(entry.graded_at).toLocaleString()}</TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </TableContainer>
+                                    )}
+                                </Box>
                             )}
                         </Box>
                     </Paper>

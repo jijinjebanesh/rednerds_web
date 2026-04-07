@@ -1,5 +1,5 @@
 ﻿import { apiClient } from './api';
-import { Product, ApiResponse, PaginatedResponse, CreateProductForm, ProductStage, ProductStatus } from '@/types';
+import { Product, ApiResponse, PaginatedResponse, CreateProductForm, ProductStage, ProductStatus, ProductQualityGrade } from '@/types';
 import { normalizePaginated } from './pagination';
 
 interface ProductListResponse extends ApiResponse<Product[]> {
@@ -87,6 +87,11 @@ export const productService = {
         }
     ): Promise<Product> {
         const response = await apiClient.put<ApiResponse<Product>>(`/products/${id}/stage`, payload);
+        return response.data.data;
+    },
+
+    async updateProductQuality(id: string, quality_grade: ProductQualityGrade): Promise<Product> {
+        const response = await apiClient.put<ApiResponse<Product>>(`/products/${id}/quality`, { quality_grade });
         return response.data.data;
     },
 

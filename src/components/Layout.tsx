@@ -23,6 +23,7 @@ import {
     ChevronLeft,
     LayoutDashboard,
     Boxes,
+    Layers,
     Home,
     Wrench,
     Bug,
@@ -55,6 +56,8 @@ const MENU_ITEMS: MenuConfigItem[] = [
     { label: 'Testing', icon: <Bug size={20} />, path: '/quality/testing', routeKey: 'testing' },
     { label: 'Debugging', icon: <AlertTriangle size={20} />, path: '/quality/debugging', routeKey: 'debugging' },
     { label: 'Repairs', icon: <Wrench size={20} />, path: '/quality/repairs', routeKey: 'repairs' },
+    { label: 'QC Grading', icon: <ShieldCheck size={20} />, path: '/quality/grading', routeKey: 'quality_grading' },
+    { label: 'Accessory Flow', icon: <Layers size={20} />, path: '/accessories/workflows', routeKey: 'accessory_workflows' },
     { label: 'Users', icon: <ShieldCheck size={20} />, path: '/admin/users', routeKey: 'users' },
 ];
 

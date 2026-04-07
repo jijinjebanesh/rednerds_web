@@ -6,6 +6,7 @@ export { productService } from './products';
 export { testLogService, debugSessionService } from './testLogs';
 export { customerRepairService, repairSessionService } from './repairs';
 export { analyticsService } from './analytics';
+export { accessoryWorkflowService } from './accessoryWorkflows';
 
 export { userService } from './users';
 
