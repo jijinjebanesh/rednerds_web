@@ -3,9 +3,9 @@ import {
     Alert,
     Box,
     Button,
-    Chip,
     Collapse,
     FormControlLabel,
+    Grid,
     MenuItem,
     Paper,
     Select,
@@ -20,8 +20,12 @@ import {
     TextField,
     Typography,
 } from '@mui/material';
+import { AlertTriangle, RotateCcw, Wrench } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import PageFeedback from '@/components/PageFeedback';
+import EmptyState from '@/components/ui/EmptyState';
+import MetricCard from '@/components/ui/MetricCard';
+import StatusChip from '@/components/ui/StatusChip';
 import { debugSessionService, productService, testLogService } from '@/services';
 import { DebugSession, Product, TestLog } from '@/types';
 import { useAppSelector } from '@/hooks/redux';
@@ -262,9 +266,33 @@ const DebuggingPage = () => {
 
             <PageFeedback isLoading={isLoading} error={error} />
 
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+                <Grid item xs={12} md={4}>
+                    <MetricCard title="Queue Depth" value={queueDepth} subtitle="Failed or partial test results awaiting action" icon={<Wrench size={18} />} />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                    <MetricCard
+                        title="Re-test Awaiting"
+                        value={queue.filter((item) => item.latestSession?.re_test_required).length}
+                        subtitle="Items already sent back for verification"
+                        icon={<RotateCcw size={18} />}
+                        accent="#F7A84F"
+                    />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                    <MetricCard
+                        title="Repeat Failures"
+                        value={queue.filter((item) => item.sessions.length > 0).length}
+                        subtitle="Products with previous debug history"
+                        icon={<AlertTriangle size={18} />}
+                        accent="#F75F5F"
+                    />
+                </Grid>
+            </Grid>
+
             <TableContainer component={Paper}>
                 <Table>
-                    <TableHead sx={{ bgcolor: '#f5f5f5' }}>
+                    <TableHead>
                         <TableRow>
                             <TableCell sx={{ fontWeight: 'bold' }}>Product</TableCell>
                             <TableCell sx={{ fontWeight: 'bold' }}>MAC</TableCell>
@@ -280,7 +308,11 @@ const DebuggingPage = () => {
                         {queue.length === 0 && !isLoading && (
                             <TableRow>
                                 <TableCell colSpan={7} sx={{ py: 3 }}>
-                                    <Typography color="text.secondary">No products are currently waiting in debugging queue.</Typography>
+                                    <EmptyState
+                                        icon={<Wrench size={24} />}
+                                        title="Debug queue is empty"
+                                        description="No failed or partial products are currently waiting for debugging work."
+                                    />
                                 </TableCell>
                             </TableRow>
                         )}
@@ -308,7 +340,7 @@ const DebuggingPage = () => {
                                         <TableCell>{item.log.station}</TableCell>
                                         <TableCell>{getAgeText(new Date(item.log.tested_at))}</TableCell>
                                         <TableCell>
-                                            <Chip label={String(previousSessions)} size="small" color={previousSessions > 0 ? 'warning' : 'default'} />
+                                            <StatusChip label={`${previousSessions} session${previousSessions === 1 ? '' : 's'}`} value={previousSessions > 0 ? 'partial' : 'active'} />
                                         </TableCell>
                                         <TableCell>
                                             <Button size="small" onClick={() => setExpandedLogId(isExpanded ? null : item.log._id)}>
@@ -320,9 +352,9 @@ const DebuggingPage = () => {
                                     <TableRow>
                                         <TableCell colSpan={7} sx={{ p: 0, borderBottom: isExpanded ? undefined : 0 }}>
                                             <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                                                <Box sx={{ p: 2.5, bgcolor: '#fafafa' }}>
+                                                <Box sx={{ p: 2.5, bgcolor: 'rgba(255,255,255,0.025)' }}>
                                                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2 }}>
-                                                        <Paper variant="outlined" sx={{ p: 1.5 }}>
+                                                        <Paper variant="outlined" sx={{ p: 1.5, backgroundColor: 'rgba(255,255,255,0.02)' }}>
                                                             <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
                                                                 Test Log Detail
                                                             </Typography>
@@ -333,7 +365,7 @@ const DebuggingPage = () => {
                                                             <Typography variant="body2">Time: {new Date(item.log.tested_at).toLocaleString()}</Typography>
                                                         </Paper>
 
-                                                        <Paper variant="outlined" sx={{ p: 1.5 }}>
+                                                        <Paper variant="outlined" sx={{ p: 1.5, backgroundColor: 'rgba(255,255,255,0.02)' }}>
                                                             <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
                                                                 Debug History
                                                             </Typography>
@@ -348,7 +380,7 @@ const DebuggingPage = () => {
                                                                         .slice()
                                                                         .sort((a, b) => new Date(b.debugged_at).getTime() - new Date(a.debugged_at).getTime())
                                                                         .map((session) => (
-                                                                            <Paper key={session._id} variant="outlined" sx={{ p: 1 }}>
+                                                                            <Paper key={session._id} variant="outlined" sx={{ p: 1, backgroundColor: 'rgba(255,255,255,0.02)' }}>
                                                                                 <Typography variant="body2" sx={{ fontWeight: 600 }}>
                                                                                     {session.issue_identified}
                                                                                 </Typography>

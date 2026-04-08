@@ -4,8 +4,7 @@ import {
     Autocomplete,
     Box,
     Button,
-    Chip,
-    Drawer,
+    Grid,
     MenuItem,
     Paper,
     Select,
@@ -22,8 +21,13 @@ import {
     ToggleButtonGroup,
     Typography,
 } from '@mui/material';
+import { Activity, ClipboardList, RotateCcw } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import PageFeedback from '@/components/PageFeedback';
+import ActionDrawer from '@/components/ui/ActionDrawer';
+import EmptyState from '@/components/ui/EmptyState';
+import MetricCard from '@/components/ui/MetricCard';
+import StatusChip from '@/components/ui/StatusChip';
 import { debugSessionService, productService, testLogService, userService } from '@/services';
 import { DebugSession, Product, TestLog } from '@/types';
 import { useAppSelector } from '@/hooks/redux';
@@ -378,6 +382,18 @@ const TestingPage = () => {
 
             <PageFeedback isLoading={isLoading} error={error} />
 
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+                <Grid item xs={12} md={4}>
+                    <MetricCard title="Fresh Queue" value={filteredFreshQueue.length} subtitle="Untested products in testing stage" icon={<ClipboardList size={18} />} />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                    <MetricCard title="Re-test Queue" value={filteredRetestQueue.length} subtitle="Returned from debugging for verification" icon={<RotateCcw size={18} />} accent="#F7A84F" />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                    <MetricCard title="Logged Results" value={filteredLogs.length} subtitle="Matching current filter set" icon={<Activity size={18} />} accent="#00C9B1" />
+                </Grid>
+            </Grid>
+
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '2fr 1fr 1fr' }, gap: 1.5, mb: 2 }}>
                 <TextField
                     fullWidth
@@ -406,7 +422,7 @@ const TestingPage = () => {
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1fr 1fr' }, gap: 2, mb: 2 }}>
                 <TableContainer component={Paper}>
                     <Table size="small">
-                        <TableHead sx={{ bgcolor: '#f5f5f5' }}>
+                        <TableHead>
                             <TableRow>
                                 <TableCell sx={{ fontWeight: 'bold' }}>Yet To Be Tested ({filteredFreshQueue.length})</TableCell>
                                 <TableCell sx={{ fontWeight: 'bold' }}>MAC</TableCell>
@@ -418,9 +434,10 @@ const TestingPage = () => {
                             {filteredFreshQueue.length === 0 && (
                                 <TableRow>
                                     <TableCell colSpan={4}>
-                                        <Typography variant="body2" color="text.secondary">
-                                            No untested products in testing stage.
-                                        </Typography>
+                                        <EmptyState
+                                            title="Fresh queue is clear"
+                                            description="No untested products are currently waiting in the testing stage."
+                                        />
                                     </TableCell>
                                 </TableRow>
                             )}
@@ -442,7 +459,7 @@ const TestingPage = () => {
 
                 <TableContainer component={Paper}>
                     <Table size="small">
-                        <TableHead sx={{ bgcolor: '#f5f5f5' }}>
+                        <TableHead>
                             <TableRow>
                                 <TableCell sx={{ fontWeight: 'bold' }}>From Debugging (Re-test) ({filteredRetestQueue.length})</TableCell>
                                 <TableCell sx={{ fontWeight: 'bold' }}>MAC</TableCell>
@@ -454,9 +471,10 @@ const TestingPage = () => {
                             {filteredRetestQueue.length === 0 && (
                                 <TableRow>
                                     <TableCell colSpan={4}>
-                                        <Typography variant="body2" color="text.secondary">
-                                            No re-test products returned from debugging.
-                                        </Typography>
+                                        <EmptyState
+                                            title="No re-tests waiting"
+                                            description="Products that require verification after debugging will appear here."
+                                        />
                                     </TableCell>
                                 </TableRow>
                             )}
@@ -527,7 +545,7 @@ const TestingPage = () => {
 
             <TableContainer component={Paper}>
                 <Table>
-                    <TableHead sx={{ bgcolor: '#f5f5f5' }}>
+                    <TableHead>
                         <TableRow>
                             <TableCell sx={{ fontWeight: 'bold' }}>Product</TableCell>
                             <TableCell sx={{ fontWeight: 'bold' }}>MAC</TableCell>
@@ -559,11 +577,7 @@ const TestingPage = () => {
                                 <TableCell>{log.mac_address}</TableCell>
                                 <TableCell>{log.station}</TableCell>
                                 <TableCell>
-                                    <Chip
-                                        label={toTitle(log.result)}
-                                        color={log.result === 'pass' ? 'success' : log.result === 'partial' ? 'warning' : 'error'}
-                                        size="small"
-                                    />
+                                    <StatusChip value={log.result} />
                                 </TableCell>
                                 <TableCell>{log.symptoms || '-'}</TableCell>
                                 <TableCell>{new Date(log.tested_at).toLocaleString()}</TableCell>
@@ -586,14 +600,16 @@ const TestingPage = () => {
                 />
             </TableContainer>
 
-            <Drawer anchor="right" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
-                <Box sx={{ width: { xs: '100vw', sm: 460 }, p: 2.5 }}>
-                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
-                        {selectedSource === 'retest' ? 'Log Re-test Result' : 'Log Test Result'}
-                    </Typography>
+            <ActionDrawer
+                open={drawerOpen}
+                onClose={() => setDrawerOpen(false)}
+                title={selectedSource === 'retest' ? 'Log Re-test Result' : 'Log Test Result'}
+                subtitle="Results update the product workflow automatically after submission."
+            >
+                <Box>
 
                     {selectedProduct && (
-                        <Paper variant="outlined" sx={{ mt: 1.5, p: 1.5 }}>
+                        <Paper variant="outlined" sx={{ mt: 1.5, p: 1.5, backgroundColor: 'rgba(255,255,255,0.02)' }}>
                             <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
                                 Product
                             </Typography>
@@ -653,7 +669,7 @@ const TestingPage = () => {
                     />
 
                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 }}>
-                        <Button onClick={() => setDrawerOpen(false)} disabled={isSubmitting}>
+                        <Button variant="outlined" onClick={() => setDrawerOpen(false)} disabled={isSubmitting}>
                             Cancel
                         </Button>
                         <Button variant="contained" onClick={handleSubmit} disabled={isSubmitting || !selectedProduct}>
@@ -661,7 +677,7 @@ const TestingPage = () => {
                         </Button>
                     </Box>
                 </Box>
-            </Drawer>
+            </ActionDrawer>
         </Box>
     );
 };

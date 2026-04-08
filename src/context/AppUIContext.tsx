@@ -82,19 +82,28 @@ export const AppUIProvider = ({ children }: { children: React.ReactNode }) => {
 
             <Snackbar
                 open={snackbarOpen}
-                autoHideDuration={3500}
+                autoHideDuration={4000}
                 onClose={() => setSnackbarOpen(false)}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
             >
-                <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarSeverity} variant="filled" sx={{ width: '100%' }}>
+                <Alert
+                    onClose={() => setSnackbarOpen(false)}
+                    severity={snackbarSeverity}
+                    variant="filled"
+                    sx={{
+                        width: '100%',
+                        minWidth: 320,
+                        alignItems: 'center',
+                    }}
+                >
                     {snackbarMessage}
                 </Alert>
             </Snackbar>
 
-            <Dialog open={confirmState.open} onClose={() => closeConfirm(false)}>
+            <Dialog open={confirmState.open} onClose={() => closeConfirm(false)} maxWidth="xs" fullWidth>
                 <DialogTitle>{confirmState.title}</DialogTitle>
                 <DialogContent>
-                    <DialogContentText>{confirmState.message}</DialogContentText>
+                    <DialogContentText sx={{ color: 'text.secondary' }}>{confirmState.message}</DialogContentText>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => closeConfirm(false)}>{confirmState.cancelText}</Button>

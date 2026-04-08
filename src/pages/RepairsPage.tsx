@@ -1,36 +1,31 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Alert,
     Box,
     Button,
-    Card,
-    CardContent,
-    Chip,
-    Drawer,
     FormControlLabel,
+    Grid,
     MenuItem,
     Paper,
     Select,
     Stack,
     Switch,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TablePagination,
-    TableRow,
     TextField,
     ToggleButton,
     ToggleButtonGroup,
     Typography,
 } from '@mui/material';
+import { PlusCircle, ShieldCheck, Wrench } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import PageFeedback from '@/components/PageFeedback';
 import { customerRepairService, productService } from '@/services';
 import { CreateCustomerRepairForm } from '@/services/repairs';
 import { CustomerRepair, Product } from '@/types';
+import MetricCard from '@/components/ui/MetricCard';
+import EmptyState from '@/components/ui/EmptyState';
+import ActionDrawer from '@/components/ui/ActionDrawer';
+import StatusChip from '@/components/ui/StatusChip';
 import { useAppUI } from '@/context/AppUIContext';
 import { REPAIR_STATUS_OPTIONS, toDateInputValue, toTitle } from '@/utils/workflowOptions';
 
@@ -52,6 +47,8 @@ const defaultIntakeForm: IntakeFormState = {
     customer_email: '',
 };
 
+const BOARD_COLUMNS: Array<CustomerRepair['status']> = ['received', 'in_progress', 'returned_to_customer', 'unrepairable'];
+
 const getDurationInDays = (start: Date, end: Date) => {
     const ms = end.getTime() - start.getTime();
     return Math.max(0, ms / (1000 * 60 * 60 * 24));
@@ -63,7 +60,6 @@ const RepairsPage = () => {
 
     const [repairs, setRepairs] = useState<CustomerRepair[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
-
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -72,9 +68,6 @@ const RepairsPage = () => {
     const [projectFilter, setProjectFilter] = useState<string>('all');
     const [warrantyOnly, setWarrantyOnly] = useState(false);
     const [dateRangeFilter, setDateRangeFilter] = useState<'7d' | '30d' | 'all'>('30d');
-
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(20);
 
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [intakeForm, setIntakeForm] = useState<IntakeFormState>(defaultIntakeForm);
@@ -114,13 +107,8 @@ const RepairsPage = () => {
         return map;
     }, [products]);
 
-    const projectOptions = useMemo(() => {
-        return Array.from(new Set(products.map((product) => product.project_id))).sort();
-    }, [products]);
-
-    const customerOptions = useMemo(() => {
-        return Array.from(new Set(repairs.map((repair) => repair.customer_id))).sort();
-    }, [repairs]);
+    const projectOptions = useMemo(() => Array.from(new Set(products.map((product) => product.project_id))).sort(), [products]);
+    const customerOptions = useMemo(() => Array.from(new Set(repairs.map((repair) => repair.customer_id))).sort(), [repairs]);
 
     const filteredRepairs = useMemo(() => {
         const term = search.trim().toLowerCase();
@@ -148,32 +136,21 @@ const RepairsPage = () => {
                 repair.complaint.toLowerCase().includes(term)
             );
         });
-    }, [repairs, productById, search, statusFilter, projectFilter, warrantyOnly, dateRangeFilter]);
-
-    const pagedRepairs = useMemo(() => {
-        const start = page * rowsPerPage;
-        return filteredRepairs.slice(start, start + rowsPerPage);
-    }, [filteredRepairs, page, rowsPerPage]);
+    }, [dateRangeFilter, productById, projectFilter, repairs, search, statusFilter, warrantyOnly]);
 
     const stats = useMemo(() => {
         const openCases = repairs.filter((repair) => ['received', 'in_progress'].includes(repair.status)).length;
         const warrantyCases = repairs.filter((repair) => repair.in_warranty).length;
-
-        const now = new Date();
-        const month = now.getMonth();
-        const year = now.getFullYear();
         const resolvedThisMonth = repairs.filter((repair) => {
             if (!repair.closed_date) return false;
             const closedAt = new Date(repair.closed_date);
-            return closedAt.getMonth() === month && closedAt.getFullYear() === year;
+            const now = new Date();
+            return closedAt.getMonth() === now.getMonth() && closedAt.getFullYear() === now.getFullYear();
         }).length;
-
         const closedWithDates = repairs.filter((repair) => repair.closed_date);
         const averageResolutionDays =
             closedWithDates.length > 0
-                ? closedWithDates.reduce((sum, repair) => {
-                      return sum + getDurationInDays(new Date(repair.received_date), new Date(repair.closed_date!));
-                  }, 0) / closedWithDates.length
+                ? closedWithDates.reduce((sum, repair) => sum + getDurationInDays(new Date(repair.received_date), new Date(repair.closed_date!)), 0) / closedWithDates.length
                 : 0;
 
         return {
@@ -183,6 +160,13 @@ const RepairsPage = () => {
             averageResolutionDays,
         };
     }, [repairs]);
+
+    const boardData = useMemo(() => {
+        return BOARD_COLUMNS.map((status) => ({
+            status,
+            items: filteredRepairs.filter((repair) => repair.status === status),
+        }));
+    }, [filteredRepairs]);
 
     const openIntakeDrawer = () => {
         setDrawerOpen(true);
@@ -202,11 +186,11 @@ const RepairsPage = () => {
             const priorCases = repairs.filter((repair) => repair.product_id === product.product_id).length;
 
             setSelectedProduct(product);
-            setIntakeForm((prev) => ({
-                ...prev,
+            setIntakeForm((previous) => ({
+                ...previous,
                 mac_address: product.mac_address,
                 product_id: product.product_id,
-                in_warranty: product.warranty_expiry ? new Date(product.warranty_expiry) > new Date() : prev.in_warranty,
+                in_warranty: product.warranty_expiry ? new Date(product.warranty_expiry) > new Date() : previous.in_warranty,
             }));
 
             notify({ message: `Product loaded. ${priorCases} prior repair case(s).`, severity: 'info' });
@@ -223,7 +207,6 @@ const RepairsPage = () => {
         }
 
         const customerId = intakeForm.customer_id.trim() || (intakeForm.customer_phone ? `CUST-${intakeForm.customer_phone.trim()}` : '');
-
         if (!customerId || !intakeForm.complaint.trim()) {
             notify({ message: 'Customer and complaint are required.', severity: 'warning' });
             return;
@@ -254,57 +237,31 @@ const RepairsPage = () => {
         <Box>
             <PageHeader
                 title="Customer Repairs"
-                subtitle="Track incoming repair cases, warranty coverage, and resolution progress."
+                subtitle="Triage incoming repair cases, monitor warranty coverage, and keep the quality service queue visible at a glance."
                 countLabel={`${filteredRepairs.length} cases`}
                 onRefresh={loadData}
                 isRefreshing={isLoading}
-                primaryAction={{
-                    label: 'New Repair Intake',
-                    onClick: openIntakeDrawer,
-                }}
+                primaryAction={{ label: 'New Repair Intake', onClick: openIntakeDrawer }}
             />
 
             <PageFeedback isLoading={isLoading} error={error} />
 
-            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2 }}>
-                <Card sx={{ flex: 1 }}>
-                    <CardContent>
-                        <Typography color="text.secondary">Open Cases</Typography>
-                        <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                            {stats.openCases}
-                        </Typography>
-                    </CardContent>
-                </Card>
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+                <Grid item xs={12} md={3}>
+                    <MetricCard title="Open Cases" value={stats.openCases} subtitle="Received and in progress" icon={<Wrench size={18} />} />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                    <MetricCard title="In Warranty" value={stats.warrantyCases} subtitle="Covered under service policy" icon={<ShieldCheck size={18} />} accent="#4FD18B" />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                    <MetricCard title="Resolved This Month" value={stats.resolvedThisMonth} subtitle="Closed repair cases" icon={<PlusCircle size={18} />} accent="#00C9B1" />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                    <MetricCard title="Avg Resolution Days" value={stats.averageResolutionDays.toFixed(1)} subtitle="Average for closed cases" icon={<Wrench size={18} />} accent="#F7A84F" />
+                </Grid>
+            </Grid>
 
-                <Card sx={{ flex: 1 }}>
-                    <CardContent>
-                        <Typography color="text.secondary">In Warranty</Typography>
-                        <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                            {stats.warrantyCases}
-                        </Typography>
-                    </CardContent>
-                </Card>
-
-                <Card sx={{ flex: 1 }}>
-                    <CardContent>
-                        <Typography color="text.secondary">Resolved This Month</Typography>
-                        <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                            {stats.resolvedThisMonth}
-                        </Typography>
-                    </CardContent>
-                </Card>
-
-                <Card sx={{ flex: 1 }}>
-                    <CardContent>
-                        <Typography color="text.secondary">Avg Resolution (Days)</Typography>
-                        <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                            {stats.averageResolutionDays.toFixed(1)}
-                        </Typography>
-                    </CardContent>
-                </Card>
-            </Stack>
-
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr 1fr' }, gap: 1.5, mb: 1.5 }}>
+            <Stack direction={{ xs: 'column', xl: 'row' }} spacing={1.5} sx={{ mb: 2.5 }}>
                 <TextField
                     fullWidth
                     placeholder="Search by product ID, customer ID, status, or complaint"
@@ -313,7 +270,7 @@ const RepairsPage = () => {
                 />
 
                 <Select fullWidth value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-                    <MenuItem value="all">All Statuses</MenuItem>
+                    <MenuItem value="all">All statuses</MenuItem>
                     {REPAIR_STATUS_OPTIONS.map((status) => (
                         <MenuItem key={status} value={status}>
                             {toTitle(status)}
@@ -322,18 +279,17 @@ const RepairsPage = () => {
                 </Select>
 
                 <Select fullWidth value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
-                    <MenuItem value="all">All Projects</MenuItem>
+                    <MenuItem value="all">All projects</MenuItem>
                     {projectOptions.map((projectId) => (
                         <MenuItem key={projectId} value={projectId}>
                             {projectId}
                         </MenuItem>
                     ))}
                 </Select>
-            </Box>
+            </Stack>
 
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 2 }}>
-                <FormControlLabel control={<Switch checked={warrantyOnly} onChange={(event) => setWarrantyOnly(event.target.checked)} />} label="In Warranty Only" />
-
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ xs: 'stretch', md: 'center' }} sx={{ mb: 3 }}>
+                <FormControlLabel control={<Switch checked={warrantyOnly} onChange={(event) => setWarrantyOnly(event.target.checked)} />} label="In warranty only" />
                 <ToggleButtonGroup
                     value={dateRangeFilter}
                     exclusive
@@ -343,74 +299,97 @@ const RepairsPage = () => {
                     }}
                     size="small"
                 >
-                    <ToggleButton value="7d">Last 7 Days</ToggleButton>
-                    <ToggleButton value="30d">Last 30 Days</ToggleButton>
+                    <ToggleButton value="7d">Last 7 days</ToggleButton>
+                    <ToggleButton value="30d">Last 30 days</ToggleButton>
                     <ToggleButton value="all">All</ToggleButton>
                 </ToggleButtonGroup>
             </Stack>
 
-            <TableContainer component={Paper}>
-                <Table>
-                    <TableHead sx={{ bgcolor: '#f5f5f5' }}>
-                        <TableRow>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Repair ID</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Product</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Customer</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Warranty</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Received</TableCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {pagedRepairs.length === 0 && !isLoading && (
-                            <TableRow>
-                                <TableCell colSpan={6} sx={{ py: 3 }}>
-                                    <Typography color="text.secondary">No repair cases found.</Typography>
-                                </TableCell>
-                            </TableRow>
-                        )}
-
-                        {pagedRepairs.map((repair) => (
-                            <TableRow key={repair._id} hover onClick={() => navigate(`/quality/repairs/${repair._id}`)} sx={{ cursor: 'pointer' }}>
-                                <TableCell>{repair._id}</TableCell>
-                                <TableCell>{repair.product_id}</TableCell>
-                                <TableCell>{repair.customer_id}</TableCell>
-                                <TableCell>
-                                    <Chip label={toTitle(repair.status)} size="small" />
-                                </TableCell>
-                                <TableCell>{repair.in_warranty ? 'In Warranty' : 'Out of Warranty'}</TableCell>
-                                <TableCell>{new Date(repair.received_date).toLocaleDateString()}</TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-
-                <TablePagination
-                    component="div"
-                    count={filteredRepairs.length}
-                    page={page}
-                    onPageChange={(_, nextPage) => setPage(nextPage)}
-                    rowsPerPage={rowsPerPage}
-                    onRowsPerPageChange={(event) => {
-                        setRowsPerPage(parseInt(event.target.value, 10));
-                        setPage(0);
-                    }}
-                    rowsPerPageOptions={[20, 50, 100]}
+            {filteredRepairs.length === 0 && !isLoading ? (
+                <EmptyState
+                    icon={<Wrench size={24} />}
+                    title="No repair cases found"
+                    description="When customer devices are received for servicing they will appear here. You can also create a fresh intake now."
+                    action={{ label: 'Create repair intake', onClick: openIntakeDrawer }}
                 />
-            </TableContainer>
+            ) : (
+                <Grid container spacing={2}>
+                    {boardData.map((column) => (
+                        <Grid item xs={12} md={6} xl={3} key={column.status}>
+                            <Paper sx={{ p: 2, height: '100%' }}>
+                                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+                                    <Typography variant="subtitle1">{toTitle(column.status)}</Typography>
+                                    <StatusChip value={column.status} />
+                                </Stack>
 
-            <Drawer anchor="right" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
-                <Box sx={{ width: { xs: '100vw', sm: 460 }, p: 2.5 }}>
-                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
-                        New Repair Intake
-                    </Typography>
+                                <Stack spacing={1.5}>
+                                    {column.items.map((repair) => {
+                                        const product = productById.get(repair.product_id);
+                                        const daysOpen = getDurationInDays(new Date(repair.received_date), new Date());
 
+                                        return (
+                                            <Paper
+                                                key={repair._id}
+                                                sx={{
+                                                    p: 1.75,
+                                                    cursor: 'pointer',
+                                                    transition: 'transform 160ms ease, border-color 160ms ease',
+                                                    '&:hover': {
+                                                        transform: 'translateY(-2px)',
+                                                        borderColor: 'primary.main',
+                                                    },
+                                                }}
+                                                onClick={() => navigate(`/quality/repairs/${repair._id}`)}
+                                            >
+                                                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1.5}>
+                                                    <Box>
+                                                        <Typography variant="subtitle2">{repair.product_id}</Typography>
+                                                        <Typography variant="body2" color="text.secondary">
+                                                            {repair.customer_id}
+                                                        </Typography>
+                                                    </Box>
+                                                    <StatusChip value={repair.in_warranty ? 'active' : 'partial'} label={repair.in_warranty ? 'Warranty' : 'Out of warranty'} />
+                                                </Stack>
+
+                                                <Typography variant="body2" sx={{ mt: 1.25 }}>
+                                                    {repair.complaint}
+                                                </Typography>
+
+                                                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1.5 }}>
+                                                    <StatusChip label={`${daysOpen.toFixed(0)}d open`} />
+                                                    {product ? <StatusChip label={product.project_id} /> : null}
+                                                </Stack>
+                                            </Paper>
+                                        );
+                                    })}
+
+                                    {column.items.length === 0 ? (
+                                        <Paper sx={{ p: 2, textAlign: 'center', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+                                            <Typography variant="body2" color="text.secondary">
+                                                No cases in this column.
+                                            </Typography>
+                                        </Paper>
+                                    ) : null}
+                                </Stack>
+                            </Paper>
+                        </Grid>
+                    ))}
+                </Grid>
+            )}
+
+            <ActionDrawer
+                open={drawerOpen}
+                onClose={() => setDrawerOpen(false)}
+                title="New Repair Intake"
+                subtitle="Lookup the serialized product first, then register the customer issue against it."
+            >
+                <Stack spacing={2}>
                     <TextField
                         fullWidth
                         label="MAC Address"
                         value={intakeForm.mac_address}
                         onChange={(event) => {
-                            setIntakeForm((prev) => ({ ...prev, mac_address: event.target.value, product_id: '' }));
+                            setIntakeForm((previous) => ({ ...previous, mac_address: event.target.value, product_id: '' }));
                             setSelectedProduct(null);
                             setLookupError(null);
                         }}
@@ -422,28 +401,24 @@ const RepairsPage = () => {
                             }
                         }}
                         placeholder="A0:B7:65:00:00:1A"
-                        sx={{ mt: 1 }}
                     />
 
-                    {lookupError && (
-                        <Alert severity="error" sx={{ mt: 1.5 }}>
-                            {lookupError}
-                        </Alert>
-                    )}
+                    {lookupError ? <Alert severity="error">{lookupError}</Alert> : null}
 
-                    {selectedProduct && (
-                        <Paper variant="outlined" sx={{ mt: 1.5, p: 1.5 }}>
-                            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                                Product Preview
+                    {selectedProduct ? (
+                        <Paper sx={{ p: 1.75 }}>
+                            <Typography variant="subtitle2">Product Preview</Typography>
+                            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
+                                Product: {selectedProduct.product_id}
                             </Typography>
-                            <Typography variant="body2">Product: {selectedProduct.product_id}</Typography>
-                            <Typography variant="body2">Project: {selectedProduct.project_id}</Typography>
-                            <Typography variant="body2">Warranty Expiry: {selectedProduct.warranty_expiry ? toDateInputValue(selectedProduct.warranty_expiry) : 'N/A'}</Typography>
-                            <Typography variant="body2" sx={{ mt: 0.5 }}>
-                                {intakeForm.in_warranty ? 'In warranty' : 'Out of warranty'}
+                            <Typography variant="body2" color="text.secondary">
+                                Project: {selectedProduct.project_id}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                Warranty expiry: {selectedProduct.warranty_expiry ? toDateInputValue(selectedProduct.warranty_expiry) : 'N/A'}
                             </Typography>
                         </Paper>
-                    )}
+                    ) : null}
 
                     <Select
                         fullWidth
@@ -455,54 +430,42 @@ const RepairsPage = () => {
                                 return;
                             }
                             setShowNewCustomerForm(false);
-                            setIntakeForm((prev) => ({ ...prev, customer_id: event.target.value }));
+                            setIntakeForm((previous) => ({ ...previous, customer_id: event.target.value }));
                         }}
-                        sx={{ mt: 2 }}
                         disabled={!selectedProduct}
                     >
-                        <MenuItem value="">Select Customer</MenuItem>
+                        <MenuItem value="">Select customer</MenuItem>
                         {customerOptions.map((customerId) => (
                             <MenuItem key={customerId} value={customerId}>
                                 {customerId}
                             </MenuItem>
                         ))}
-                        <MenuItem value="__new__">Add New Customer</MenuItem>
+                        <MenuItem value="__new__">Add new customer</MenuItem>
                     </Select>
 
-                    {showNewCustomerForm && (
-                        <Box sx={{ mt: 1.5, display: 'grid', gap: 1 }}>
-                            <TextField
-                                fullWidth
-                                label="Customer Name"
-                                value={intakeForm.customer_name}
-                                onChange={(event) => setIntakeForm((prev) => ({ ...prev, customer_name: event.target.value }))}
-                            />
+                    {showNewCustomerForm ? (
+                        <Stack spacing={1.5}>
+                            <TextField fullWidth label="Customer Name" value={intakeForm.customer_name} onChange={(event) => setIntakeForm((previous) => ({ ...previous, customer_name: event.target.value }))} />
                             <TextField
                                 fullWidth
                                 label="Phone"
                                 value={intakeForm.customer_phone}
                                 onChange={(event) => {
                                     const phone = event.target.value;
-                                    setIntakeForm((prev) => ({ ...prev, customer_phone: phone, customer_id: phone ? `CUST-${phone}` : '' }));
+                                    setIntakeForm((previous) => ({ ...previous, customer_phone: phone, customer_id: phone ? `CUST-${phone}` : '' }));
                                 }}
                             />
-                            <TextField
-                                fullWidth
-                                label="Email"
-                                value={intakeForm.customer_email}
-                                onChange={(event) => setIntakeForm((prev) => ({ ...prev, customer_email: event.target.value }))}
-                            />
-                        </Box>
-                    )}
+                            <TextField fullWidth label="Email" value={intakeForm.customer_email} onChange={(event) => setIntakeForm((previous) => ({ ...previous, customer_email: event.target.value }))} />
+                        </Stack>
+                    ) : null}
 
                     <TextField
                         fullWidth
                         label="Complaint"
                         multiline
-                        rows={3}
+                        rows={4}
                         value={intakeForm.complaint}
-                        onChange={(event) => setIntakeForm((prev) => ({ ...prev, complaint: event.target.value }))}
-                        sx={{ mt: 2 }}
+                        onChange={(event) => setIntakeForm((previous) => ({ ...previous, complaint: event.target.value }))}
                         disabled={!selectedProduct}
                     />
 
@@ -511,32 +474,25 @@ const RepairsPage = () => {
                         type="date"
                         label="Received Date"
                         value={toDateInputValue(intakeForm.received_date)}
-                        onChange={(event) => setIntakeForm((prev) => ({ ...prev, received_date: event.target.value }))}
+                        onChange={(event) => setIntakeForm((previous) => ({ ...previous, received_date: event.target.value }))}
                         InputLabelProps={{ shrink: true }}
-                        sx={{ mt: 2 }}
                     />
 
                     <FormControlLabel
-                        sx={{ mt: 1 }}
-                        control={
-                            <Switch
-                                checked={intakeForm.in_warranty}
-                                onChange={(event) => setIntakeForm((prev) => ({ ...prev, in_warranty: event.target.checked }))}
-                            />
-                        }
-                        label="In Warranty"
+                        control={<Switch checked={intakeForm.in_warranty} onChange={(event) => setIntakeForm((previous) => ({ ...previous, in_warranty: event.target.checked }))} />}
+                        label="In warranty"
                     />
 
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 }}>
-                        <Button onClick={() => setDrawerOpen(false)} disabled={isSubmitting}>
+                    <Stack direction="row" justifyContent="flex-end" spacing={1.5}>
+                        <Button variant="outlined" onClick={() => setDrawerOpen(false)} disabled={isSubmitting}>
                             Cancel
                         </Button>
-                        <Button variant="contained" onClick={handleCreateRepair} disabled={isSubmitting || !selectedProduct}>
+                        <Button variant="contained" onClick={() => void handleCreateRepair()} disabled={isSubmitting || !selectedProduct}>
                             {isSubmitting ? 'Saving...' : 'Create Intake'}
                         </Button>
-                    </Box>
-                </Box>
-            </Drawer>
+                    </Stack>
+                </Stack>
+            </ActionDrawer>
         </Box>
     );
 };

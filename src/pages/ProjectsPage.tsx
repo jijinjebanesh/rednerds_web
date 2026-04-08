@@ -1,35 +1,30 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
     Box,
     Button,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogTitle,
+    Card,
+    CardContent,
+    Grid,
     IconButton,
     Menu,
     MenuItem,
-    Paper,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TablePagination,
-    TableRow,
+    Stack,
     TextField,
     ToggleButton,
     ToggleButtonGroup,
     Typography,
 } from '@mui/material';
-import { MoreVertical } from 'lucide-react';
+import { Boxes, FolderKanban, Layers, MoreVertical, Plus } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '@/hooks/redux';
 import { setProjects, setLoading, setError, clearError } from '@/store/projectSlice';
-import { batchService, projectService } from '@/services';
+import { accessoryWorkflowService, batchService, projectService } from '@/services';
 import { CreateProjectForm, Project } from '@/types';
 import PageHeader from '@/components/PageHeader';
 import PageFeedback from '@/components/PageFeedback';
+import ActionDrawer from '@/components/ui/ActionDrawer';
+import EmptyState from '@/components/ui/EmptyState';
+import StatusChip from '@/components/ui/StatusChip';
 import { useAppUI } from '@/context/AppUIContext';
 import { PROJECT_STATUS_OPTIONS, toTitle } from '@/utils/workflowOptions';
 import { hasPermission } from '@/utils/rbac';
@@ -52,7 +47,6 @@ const ProjectsPage = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const dispatch = useAppDispatch();
     const { notify, confirm } = useAppUI();
-
     const { projects, isLoading, error, total } = useAppSelector((state) => state.projects);
     const role = useAppSelector((state) => state.auth.user?.role);
 
@@ -60,18 +54,18 @@ const ProjectsPage = () => {
     const [debouncedSearch, setDebouncedSearch] = useState(searchParams.get('q') ?? '');
     const [statusFilter, setStatusFilter] = useState<string>(searchParams.get('status') ?? 'all');
     const [projectTypeFilter, setProjectTypeFilter] = useState<string>(searchParams.get('project_type') ?? 'all');
-    const [page, setPage] = useState(Math.max(0, Number(searchParams.get('page') ?? '1') - 1));
-    const [rowsPerPage, setRowsPerPage] = useState(Number(searchParams.get('limit') ?? '20'));
+    const [page] = useState(0);
+    const [rowsPerPage] = useState(48);
 
-    const [dialogOpen, setDialogOpen] = useState(false);
+    const [drawerOpen, setDrawerOpen] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
     const [form, setForm] = useState<ProjectFormState>(initialForm);
 
     const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
     const [menuProject, setMenuProject] = useState<Project | null>(null);
-
-    const [highlightedProjectId, setHighlightedProjectId] = useState<string | null>(null);
+    const [batchCounts, setBatchCounts] = useState<Record<string, number>>({});
+    const [workflowCounts, setWorkflowCounts] = useState<Record<string, number>>({});
 
     const canCreate = hasPermission(role, 'projects.create');
     const canUpdate = hasPermission(role, 'projects.update');
@@ -80,33 +74,25 @@ const ProjectsPage = () => {
     useEffect(() => {
         const timer = setTimeout(() => {
             setDebouncedSearch(searchInput);
-        }, 400);
-
+        }, 300);
         return () => clearTimeout(timer);
     }, [searchInput]);
 
     useEffect(() => {
-        const params: Record<string, string> = {
-            page: String(page + 1),
-            limit: String(rowsPerPage),
-        };
-
+        const params: Record<string, string> = {};
         if (statusFilter !== 'all') params.status = statusFilter;
-        if (searchInput.trim()) params.q = searchInput.trim();
         if (projectTypeFilter !== 'all') params.project_type = projectTypeFilter;
-
+        if (searchInput.trim()) params.q = searchInput.trim();
         setSearchParams(params, { replace: true });
-    }, [page, rowsPerPage, statusFilter, searchInput, projectTypeFilter, setSearchParams]);
+    }, [projectTypeFilter, searchInput, setSearchParams, statusFilter]);
 
     useEffect(() => {
-        loadProjects();
-    }, [page, rowsPerPage, statusFilter, debouncedSearch, projectTypeFilter]);
+        void loadProjects();
+    }, [page, rowsPerPage, statusFilter, projectTypeFilter]);
 
     useEffect(() => {
-        if (!highlightedProjectId) return;
-        const timer = setTimeout(() => setHighlightedProjectId(null), 2200);
-        return () => clearTimeout(timer);
-    }, [highlightedProjectId]);
+        void loadSupplementalCounts();
+    }, [projects]);
 
     const filteredProjects = useMemo(() => {
         const term = debouncedSearch.trim().toLowerCase();
@@ -122,6 +108,13 @@ const ProjectsPage = () => {
         });
     }, [projects, debouncedSearch]);
 
+    const slugify = (value: string) =>
+        value
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+
     const loadProjects = async () => {
         try {
             dispatch(setLoading(true));
@@ -134,38 +127,51 @@ const ProjectsPage = () => {
             dispatch(setProjects(response));
             dispatch(clearError());
         } catch (err: any) {
-            const message = err?.response?.data?.message || err?.message || 'Failed to load projects';
-            dispatch(setError(message));
+            dispatch(setError(err?.response?.data?.message || err?.message || 'Failed to load projects'));
         } finally {
             dispatch(setLoading(false));
         }
     };
 
-    const slugify = (value: string) =>
-        value
-            .trim()
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-+|-+$/g, '');
+    const loadSupplementalCounts = async () => {
+        if (!projects.length) {
+            setBatchCounts({});
+            setWorkflowCounts({});
+            return;
+        }
 
-    const handleNameChange = (value: string) => {
-        const nextSlug = slugify(value);
-        setForm((prev) => ({
-            ...prev,
-            name: value,
-            slug: isEditing ? prev.slug : nextSlug,
-            _id: isEditing ? prev._id : `PROJ-${nextSlug.toUpperCase()}`,
-        }));
+        try {
+            const [batchesRes, workflowsRes] = await Promise.all([
+                batchService.getBatches(1, 1000),
+                accessoryWorkflowService.getWorkflows(1, 1000),
+            ]);
+
+            const nextBatchCounts = batchesRes.data.reduce<Record<string, number>>((accumulator, batch) => {
+                accumulator[batch.project_id] = (accumulator[batch.project_id] ?? 0) + 1;
+                return accumulator;
+            }, {});
+
+            const nextWorkflowCounts = workflowsRes.data.reduce<Record<string, number>>((accumulator, workflow) => {
+                accumulator[workflow.project_id] = (accumulator[workflow.project_id] ?? 0) + 1;
+                return accumulator;
+            }, {});
+
+            setBatchCounts(nextBatchCounts);
+            setWorkflowCounts(nextWorkflowCounts);
+        } catch {
+            setBatchCounts({});
+            setWorkflowCounts({});
+        }
     };
 
-    const openCreateDialog = () => {
+    const openCreateDrawer = () => {
         setIsEditing(false);
         setEditingProjectId(null);
         setForm(initialForm);
-        setDialogOpen(true);
+        setDrawerOpen(true);
     };
 
-    const openEditDialog = (project: Project) => {
+    const openEditDrawer = (project: Project) => {
         setIsEditing(true);
         setEditingProjectId(project._id);
         setForm({
@@ -176,12 +182,7 @@ const ProjectsPage = () => {
             status: project.status,
             project_type: project.project_type ?? 'device',
         });
-        setDialogOpen(true);
-    };
-
-    const closeMenu = () => {
-        setMenuAnchor(null);
-        setMenuProject(null);
+        setDrawerOpen(true);
     };
 
     const handleSave = async () => {
@@ -201,21 +202,12 @@ const ProjectsPage = () => {
                     project_type: form.project_type,
                 });
                 notify({ message: 'Project updated successfully.', severity: 'success' });
-                setHighlightedProjectId(editingProjectId);
             } else {
-                await projectService.createProject({
-                    _id: form._id,
-                    name: form.name,
-                    slug: form.slug,
-                    description: form.description,
-                    status: form.status,
-                    project_type: form.project_type,
-                });
+                await projectService.createProject(form);
                 notify({ message: 'Project created successfully.', severity: 'success' });
-                setHighlightedProjectId(form._id);
             }
 
-            setDialogOpen(false);
+            setDrawerOpen(false);
             await loadProjects();
         } catch (err: any) {
             notify({ message: err?.response?.data?.message || err?.message || 'Failed to save project', severity: 'error' });
@@ -230,7 +222,7 @@ const ProjectsPage = () => {
             const approved = await confirm({
                 title: 'Delete Project',
                 message: `Delete ${project.name}? This project has ${linkedBatches.total} linked batch(es).`,
-                confirmText: 'Delete',
+                confirmText: 'Delete Project',
                 tone: 'error',
             });
 
@@ -251,202 +243,245 @@ const ProjectsPage = () => {
         <Box>
             <PageHeader
                 title="Projects"
-                subtitle="Manage product lines and lifecycle states across manufacturing operations."
+                subtitle="Organize device and accessory programs, track their lifecycle state, and jump into the right workflow quickly."
                 countLabel={`${total} total`}
                 onRefresh={loadProjects}
                 isRefreshing={isLoading}
-                primaryAction={
-                    canCreate
-                        ? {
-                              label: 'New Project',
-                              onClick: openCreateDialog,
-                          }
-                        : undefined
-                }
+                primaryAction={canCreate ? { label: 'Create Project', onClick: openCreateDrawer } : undefined}
             />
 
             <PageFeedback isLoading={isLoading} error={error || null} />
 
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr 1fr' }, gap: 1.5, mb: 2 }}>
+            <Stack direction={{ xs: 'column', xl: 'row' }} spacing={1.5} sx={{ mb: 3 }}>
                 <TextField
                     fullWidth
-                    placeholder="Search by name, slug, status, or project type"
+                    placeholder="Search by project name, slug, type, or status"
                     value={searchInput}
                     onChange={(event) => setSearchInput(event.target.value)}
                 />
 
                 <ToggleButtonGroup
-                    fullWidth
                     value={statusFilter}
                     exclusive
                     onChange={(_, nextValue) => {
                         if (!nextValue) return;
                         setStatusFilter(nextValue);
-                        setPage(0);
                     }}
                     size="small"
                 >
-                    <ToggleButton value="all">All</ToggleButton>
-                        {PROJECT_STATUS_OPTIONS.map((status) => (
-                            <ToggleButton key={status} value={status}>
-                                {toTitle(status)}
-                            </ToggleButton>
-                        ))}
-                    </ToggleButtonGroup>
+                    <ToggleButton value="all">All statuses</ToggleButton>
+                    {PROJECT_STATUS_OPTIONS.map((status) => (
+                        <ToggleButton key={status} value={status}>
+                            {toTitle(status)}
+                        </ToggleButton>
+                    ))}
+                </ToggleButtonGroup>
 
                 <ToggleButtonGroup
-                    fullWidth
                     value={projectTypeFilter}
                     exclusive
                     onChange={(_, nextValue) => {
                         if (!nextValue) return;
                         setProjectTypeFilter(nextValue);
-                        setPage(0);
                     }}
                     size="small"
                 >
-                    <ToggleButton value="all">All Types</ToggleButton>
+                    <ToggleButton value="all">All types</ToggleButton>
                     <ToggleButton value="device">Device</ToggleButton>
                     <ToggleButton value="accessory">Accessory</ToggleButton>
                 </ToggleButtonGroup>
-            </Box>
+            </Stack>
 
-            <TableContainer component={Paper}>
-                <Table>
-                    <TableHead sx={{ bgcolor: '#f5f5f5' }}>
-                        <TableRow>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Name</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Slug</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Type</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Description</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold', width: 64 }} />
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {filteredProjects.length === 0 && !isLoading && (
-                            <TableRow>
-                                <TableCell colSpan={6} sx={{ py: 3 }}>
-                                    <Typography color="text.secondary">No projects found.</Typography>
-                                </TableCell>
-                            </TableRow>
-                        )}
-
-                        {filteredProjects.map((project) => (
-                            <TableRow
-                                key={project._id}
-                                hover
-                                onClick={() => navigate(`/manufacturing/projects/${project._id}`)}
-                                sx={{
-                                    cursor: 'pointer',
-                                    bgcolor: highlightedProjectId === project._id ? 'rgba(46, 125, 50, 0.12)' : undefined,
-                                    transition: 'background-color 400ms ease',
-                                }}
-                            >
-                                <TableCell>{project.name}</TableCell>
-                                <TableCell>{project.slug}</TableCell>
-                                <TableCell>{toTitle(project.project_type || 'device')}</TableCell>
-                                <TableCell>{toTitle(project.status)}</TableCell>
-                                <TableCell>{project.description || '-'}</TableCell>
-                                <TableCell onClick={(event) => event.stopPropagation()}>
-                                    <IconButton
-                                        size="small"
-                                        onClick={(event) => {
-                                            setMenuAnchor(event.currentTarget);
-                                            setMenuProject(project);
-                                        }}
-                                    >
-                                        <MoreVertical size={18} />
-                                    </IconButton>
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-
-                <TablePagination
-                    component="div"
-                    count={total}
-                    page={page}
-                    onPageChange={(_, nextPage) => setPage(nextPage)}
-                    rowsPerPage={rowsPerPage}
-                    onRowsPerPageChange={(event) => {
-                        setRowsPerPage(parseInt(event.target.value, 10));
-                        setPage(0);
-                    }}
-                    rowsPerPageOptions={[20, 50, 100]}
+            {filteredProjects.length === 0 && !isLoading ? (
+                <EmptyState
+                    icon={<FolderKanban size={24} />}
+                    title="No projects found"
+                    description="Start by creating your first device or accessory project. It will become the parent for batches or accessory quantity workflows."
+                    action={canCreate ? { label: 'Create your first project', onClick: openCreateDrawer } : undefined}
                 />
-            </TableContainer>
+            ) : (
+                <Grid container spacing={2}>
+                    {filteredProjects.map((project) => {
+                        const activityCount = project.project_type === 'device' ? batchCounts[project._id] ?? 0 : workflowCounts[project._id] ?? 0;
+                        const activityLabel = project.project_type === 'device' ? 'Batches' : 'Workflows';
 
-            <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>
+                        return (
+                            <Grid item xs={12} md={6} xl={4} key={project._id}>
+                                <Card
+                                    sx={{
+                                        height: '100%',
+                                        cursor: 'pointer',
+                                        transition: 'transform 160ms ease, border-color 160ms ease',
+                                        '&:hover': {
+                                            transform: 'translateY(-2px)',
+                                            borderColor: 'primary.main',
+                                        },
+                                    }}
+                                    onClick={() => navigate(`/manufacturing/projects/${project._id}`)}
+                                >
+                                    <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 2.25, height: '100%' }}>
+                                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={2}>
+                                            <Box>
+                                                <Typography variant="overline">{project.project_type === 'device' ? 'Device Project' : 'Accessory Project'}</Typography>
+                                                <Typography variant="h6">{project.name}</Typography>
+                                                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                                                    {project.slug}
+                                                </Typography>
+                                            </Box>
+                                            <IconButton
+                                                size="small"
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    setMenuAnchor(event.currentTarget);
+                                                    setMenuProject(project);
+                                                }}
+                                            >
+                                                <MoreVertical size={18} />
+                                            </IconButton>
+                                        </Stack>
+
+                                        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                                            <StatusChip value={project.project_type} />
+                                            <StatusChip value={project.status} />
+                                        </Stack>
+
+                                        <Typography variant="body2" color="text.secondary" sx={{ minHeight: 44 }}>
+                                            {project.description || 'No description added yet. Use this project as the control point for all linked manufacturing work.'}
+                                        </Typography>
+
+                                        <Stack direction="row" spacing={1.25}>
+                                            <Box
+                                                sx={{
+                                                    flex: 1,
+                                                    p: 1.5,
+                                                    borderRadius: 2.5,
+                                                    border: '1px solid',
+                                                    borderColor: 'divider',
+                                                    backgroundColor: 'rgba(255,255,255,0.02)',
+                                                }}
+                                            >
+                                                <Typography variant="body2" color="text.secondary">
+                                                    {activityLabel}
+                                                </Typography>
+                                                <Typography variant="h6" sx={{ mt: 0.5 }}>
+                                                    {activityCount}
+                                                </Typography>
+                                            </Box>
+
+                                            <Box
+                                                sx={{
+                                                    flex: 1,
+                                                    p: 1.5,
+                                                    borderRadius: 2.5,
+                                                    border: '1px solid',
+                                                    borderColor: 'divider',
+                                                    backgroundColor: 'rgba(255,255,255,0.02)',
+                                                }}
+                                            >
+                                                <Typography variant="body2" color="text.secondary">
+                                                    Updated
+                                                </Typography>
+                                                <Typography variant="subtitle2" sx={{ mt: 0.8 }}>
+                                                    {new Date(project.updated_at ?? project.updatedAt ?? project.created_at ?? project.createdAt ?? Date.now()).toLocaleDateString()}
+                                                </Typography>
+                                            </Box>
+                                        </Stack>
+
+                                        <Button
+                                            variant="outlined"
+                                            startIcon={project.project_type === 'device' ? <Boxes size={16} /> : <Layers size={16} />}
+                                            sx={{ mt: 'auto', alignSelf: 'flex-start' }}
+                                        >
+                                            Open Details
+                                        </Button>
+                                    </CardContent>
+                                </Card>
+                            </Grid>
+                        );
+                    })}
+                </Grid>
+            )}
+
+            <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
                 <MenuItem
                     onClick={() => {
                         if (menuProject) navigate(`/manufacturing/projects/${menuProject._id}`);
-                        closeMenu();
+                        setMenuAnchor(null);
                     }}
                 >
-                    View
+                    View project
                 </MenuItem>
-
                 <MenuItem
                     disabled={!canUpdate || !menuProject}
                     onClick={() => {
-                        if (menuProject) openEditDialog(menuProject);
-                        closeMenu();
+                        if (menuProject) openEditDrawer(menuProject);
+                        setMenuAnchor(null);
                     }}
                 >
-                    Edit
+                    Edit project
                 </MenuItem>
-
                 <MenuItem
                     disabled={!canDelete || !menuProject}
                     onClick={() => {
                         if (menuProject) void handleDelete(menuProject);
-                        closeMenu();
+                        setMenuAnchor(null);
                     }}
                 >
-                    Delete
+                    Delete project
                 </MenuItem>
             </Menu>
 
-            <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>{isEditing ? 'Edit Project' : 'Create Project'}</DialogTitle>
-                <DialogContent>
+            <ActionDrawer
+                open={drawerOpen}
+                onClose={() => setDrawerOpen(false)}
+                title={isEditing ? 'Edit Project' : 'Create Project'}
+                subtitle="Project creation stays fully compatible with existing routes, APIs, and role permissions."
+            >
+                <Stack spacing={2}>
                     <TextField
                         fullWidth
-                        margin="normal"
                         label="Project Name"
                         value={form.name}
-                        onChange={(event) => handleNameChange(event.target.value)}
-                    />
-
-                    <TextField
-                        fullWidth
-                        margin="normal"
-                        label="Slug"
-                        value={form.slug}
                         onChange={(event) => {
-                            const slug = slugify(event.target.value);
-                            setForm((prev) => ({ ...prev, slug, _id: isEditing ? prev._id : `PROJ-${slug.toUpperCase()}` }));
+                            const value = event.target.value;
+                            const slug = slugify(value);
+                            setForm((previous) => ({
+                                ...previous,
+                                name: value,
+                                slug: isEditing ? previous.slug : slug,
+                                _id: isEditing ? previous._id : `PROJ-${slug.toUpperCase()}`,
+                            }));
                         }}
                     />
 
                     <TextField
                         fullWidth
-                        margin="normal"
-                        label="Project ID"
-                        value={form._id}
-                        onChange={(event) => setForm((prev) => ({ ...prev, _id: event.target.value.toUpperCase().trim() }))}
+                        label="Slug"
+                        value={form.slug}
+                        onChange={(event) => {
+                            const slug = slugify(event.target.value);
+                            setForm((previous) => ({
+                                ...previous,
+                                slug,
+                                _id: isEditing ? previous._id : `PROJ-${slug.toUpperCase()}`,
+                            }));
+                        }}
                     />
 
                     <TextField
                         fullWidth
-                        margin="normal"
+                        label="Project ID"
+                        value={form._id}
+                        onChange={(event) => setForm((previous) => ({ ...previous, _id: event.target.value.toUpperCase().trim() }))}
+                    />
+
+                    <TextField
+                        fullWidth
                         label="Description"
                         multiline
-                        rows={3}
+                        rows={4}
                         value={form.description}
-                        onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
+                        onChange={(event) => setForm((previous) => ({ ...previous, description: event.target.value }))}
                     />
 
                     <ToggleButtonGroup
@@ -455,12 +490,11 @@ const ProjectsPage = () => {
                         value={form.project_type}
                         onChange={(_, nextValue) => {
                             if (!nextValue) return;
-                            setForm((prev) => ({ ...prev, project_type: nextValue }));
+                            setForm((previous) => ({ ...previous, project_type: nextValue }));
                         }}
-                        sx={{ mt: 1 }}
                     >
-                        <ToggleButton value="device">Device Project</ToggleButton>
-                        <ToggleButton value="accessory">Accessory Project</ToggleButton>
+                        <ToggleButton value="device">Device project</ToggleButton>
+                        <ToggleButton value="accessory">Accessory project</ToggleButton>
                     </ToggleButtonGroup>
 
                     <ToggleButtonGroup
@@ -469,9 +503,8 @@ const ProjectsPage = () => {
                         value={form.status}
                         onChange={(_, nextValue) => {
                             if (!nextValue) return;
-                            setForm((prev) => ({ ...prev, status: nextValue }));
+                            setForm((previous) => ({ ...previous, status: nextValue }));
                         }}
-                        sx={{ mt: 1.5 }}
                     >
                         {PROJECT_STATUS_OPTIONS.map((status) => (
                             <ToggleButton key={status} value={status}>
@@ -479,25 +512,19 @@ const ProjectsPage = () => {
                             </ToggleButton>
                         ))}
                     </ToggleButtonGroup>
-                </DialogContent>
-                <DialogActions>
-                    <Button
-                        onClick={() => {
-                            setDialogOpen(false);
-                            setEditingProjectId(null);
-                            setIsEditing(false);
-                        }}
-                    >
-                        Cancel
-                    </Button>
-                    <Button variant="contained" onClick={handleSave} disabled={isLoading}>
-                        {isEditing ? 'Save Changes' : 'Create Project'}
-                    </Button>
-                </DialogActions>
-            </Dialog>
+
+                    <Stack direction="row" justifyContent="flex-end" spacing={1.5} sx={{ pt: 1 }}>
+                        <Button variant="outlined" onClick={() => setDrawerOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button variant="contained" startIcon={<Plus size={16} />} onClick={() => void handleSave()} disabled={isLoading}>
+                            {isEditing ? 'Save Changes' : 'Create Project'}
+                        </Button>
+                    </Stack>
+                </Stack>
+            </ActionDrawer>
         </Box>
     );
 };
 
 export default ProjectsPage;
-

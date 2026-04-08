@@ -1,16 +1,11 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     Box,
     Button,
-    Chip,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogTitle,
     FormControlLabel,
     MenuItem,
-    Paper,
     Select,
+    Stack,
     Switch,
     Table,
     TableBody,
@@ -21,10 +16,14 @@ import {
     TextField,
     Typography,
 } from '@mui/material';
+import { MailPlus, ShieldCheck, UserCog } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import PageFeedback from '@/components/PageFeedback';
 import { userService } from '@/services';
 import { AppUser } from '@/services/users';
+import ActionDrawer from '@/components/ui/ActionDrawer';
+import EmptyState from '@/components/ui/EmptyState';
+import StatusChip from '@/components/ui/StatusChip';
 import { useAppUI } from '@/context/AppUIContext';
 import { USER_ROLE_OPTIONS, toTitle } from '@/utils/workflowOptions';
 
@@ -124,7 +123,7 @@ const UsersPage = () => {
         });
     }, [users, search]);
 
-    const openEditDialog = (user: AppUser) => {
+    const openEditDrawer = (user: AppUser) => {
         setEditState({
             id: user.id,
             name: user.name,
@@ -135,11 +134,6 @@ const UsersPage = () => {
             is_active: (user.status ?? 'active') === 'active',
         });
         setEditOpen(true);
-    };
-
-    const openCreateDialog = () => {
-        setCreateState(createInitialUserState());
-        setCreateOpen(true);
     };
 
     const handleCreateUser = async () => {
@@ -215,7 +209,7 @@ const UsersPage = () => {
     const handleDeactivate = async (user: AppUser) => {
         const approved = await confirm({
             title: 'Deactivate User',
-            message: `Deactivate ${user.name}?`,
+            message: `Deactivate ${user.name}? They will lose access until reactivated.`,
             confirmText: 'Deactivate',
             tone: 'error',
         });
@@ -238,213 +232,173 @@ const UsersPage = () => {
         <Box>
             <PageHeader
                 title="User Management"
-                subtitle="Admin-only controls for user profile, role assignment, station mapping, and activation state."
+                subtitle="Admin-only controls for invitations, role assignment, station mapping, and activation state."
                 countLabel={`${filteredUsers.length} users`}
                 onRefresh={loadUsers}
                 isRefreshing={isLoading}
-                primaryAction={{
-                    label: 'New User',
-                    onClick: openCreateDialog,
-                }}
+                primaryAction={{ label: 'Invite User', onClick: () => setCreateOpen(true) }}
             />
 
             <PageFeedback isLoading={isLoading} error={error} />
 
-            <TextField
-                fullWidth
-                placeholder="Search by name, email, phone, or role"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                sx={{ mb: 2 }}
-            />
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2.5 }}>
+                <TextField
+                    fullWidth
+                    placeholder="Search by name, email, phone, or role"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                />
 
-            <TableContainer component={Paper}>
-                <Table>
-                    <TableHead sx={{ bgcolor: '#f5f5f5' }}>
-                        <TableRow>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Name</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Email</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Role</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Assigned Station</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Phone</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Actions</TableCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {filteredUsers.length === 0 && !isLoading && (
+                <Button variant="outlined" startIcon={<UserCog size={16} />} onClick={() => setCreateOpen(true)}>
+                    New account
+                </Button>
+            </Stack>
+
+            {filteredUsers.length === 0 && !isLoading ? (
+                <EmptyState
+                    icon={<ShieldCheck size={24} />}
+                    title="No users found"
+                    description="Invite the first operational user to start role-based access across testing, debugging, QC, and administration."
+                    action={{ label: 'Invite user', onClick: () => setCreateOpen(true) }}
+                />
+            ) : (
+                <TableContainer>
+                    <Table>
+                        <TableHead>
                             <TableRow>
-                                <TableCell colSpan={7} sx={{ py: 3 }}>
-                                    <Typography color="text.secondary">No users found.</Typography>
-                                </TableCell>
+                                <TableCell>Name</TableCell>
+                                <TableCell>Email</TableCell>
+                                <TableCell>Role</TableCell>
+                                <TableCell>Assigned Station</TableCell>
+                                <TableCell>Status</TableCell>
+                                <TableCell>Last Login</TableCell>
+                                <TableCell align="right">Actions</TableCell>
                             </TableRow>
-                        )}
+                        </TableHead>
+                        <TableBody>
+                            {filteredUsers.map((user) => {
+                                const active = (user.status ?? 'active') === 'active';
+                                return (
+                                    <TableRow key={user.id} hover>
+                                        <TableCell>
+                                            <Typography variant="subtitle2">{user.name}</Typography>
+                                            <Typography variant="body2" color="text.secondary">
+                                                {user.phone || 'No phone'}
+                                            </Typography>
+                                        </TableCell>
+                                        <TableCell>{user.email}</TableCell>
+                                        <TableCell>
+                                            <StatusChip value={user.role ?? 'user'} />
+                                        </TableCell>
+                                        <TableCell>{user.assigned_station ?? '-'}</TableCell>
+                                        <TableCell>
+                                            <StatusChip value={active ? 'active' : 'inactive'} label={active ? 'Active' : 'Inactive'} />
+                                        </TableCell>
+                                        <TableCell>{user.last_login ? new Date(user.last_login).toLocaleString() : 'Never'}</TableCell>
+                                        <TableCell align="right">
+                                            <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                <Button size="small" variant="outlined" onClick={() => openEditDrawer(user)}>
+                                                    Edit
+                                                </Button>
+                                                <Button size="small" color="error" variant="text" onClick={() => void handleDeactivate(user)} disabled={!active}>
+                                                    Deactivate
+                                                </Button>
+                                            </Stack>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+            )}
 
-                        {filteredUsers.map((user) => {
-                            const active = (user.status ?? 'active') === 'active';
-                            return (
-                                <TableRow key={user.id} hover>
-                                    <TableCell>{user.name}</TableCell>
-                                    <TableCell>{user.email}</TableCell>
-                                    <TableCell>{toTitle(user.role ?? 'user')}</TableCell>
-                                    <TableCell>{user.assigned_station ?? '-'}</TableCell>
-                                    <TableCell>{user.phone || '-'}</TableCell>
-                                    <TableCell>
-                                        <Chip label={active ? 'Active' : 'Inactive'} size="small" color={active ? 'success' : 'default'} />
-                                    </TableCell>
-                                    <TableCell>
-                                        <Box sx={{ display: 'flex', gap: 1 }}>
-                                            <Button size="small" onClick={() => openEditDialog(user)}>
-                                                Edit
-                                            </Button>
-                                            <Button size="small" color="error" onClick={() => void handleDeactivate(user)} disabled={!active}>
-                                                Deactivate
-                                            </Button>
-                                        </Box>
-                                    </TableCell>
-                                </TableRow>
-                            );
-                        })}
-                    </TableBody>
-                </Table>
-            </TableContainer>
-
-            <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>Create User</DialogTitle>
-                <DialogContent>
+            <ActionDrawer
+                open={createOpen}
+                onClose={() => setCreateOpen(false)}
+                title="Invite User"
+                subtitle="Create a login, assign the correct role, and optionally bind an operating station."
+            >
+                <Stack spacing={2}>
+                    <TextField fullWidth label="Name" value={createState.name} onChange={(event) => setCreateState((previous) => ({ ...previous, name: event.target.value }))} />
+                    <TextField fullWidth label="Email" value={createState.email} onChange={(event) => setCreateState((previous) => ({ ...previous, email: event.target.value }))} />
+                    <TextField fullWidth label="Phone" value={createState.phone} onChange={(event) => setCreateState((previous) => ({ ...previous, phone: event.target.value }))} />
                     <TextField
                         fullWidth
-                        margin="normal"
-                        label="Name"
-                        value={createState.name}
-                        onChange={(event) => setCreateState((prev) => ({ ...prev, name: event.target.value }))}
-                    />
-
-                    <TextField
-                        fullWidth
-                        margin="normal"
-                        label="Email"
-                        value={createState.email}
-                        onChange={(event) => setCreateState((prev) => ({ ...prev, email: event.target.value }))}
-                    />
-
-                    <TextField
-                        fullWidth
-                        margin="normal"
-                        label="Phone"
-                        value={createState.phone}
-                        onChange={(event) => setCreateState((prev) => ({ ...prev, phone: event.target.value }))}
-                    />
-
-                    <TextField
-                        fullWidth
-                        margin="normal"
                         label="Temporary Password"
                         value={createState.password}
-                        onChange={(event) => setCreateState((prev) => ({ ...prev, password: event.target.value }))}
-                        helperText="Shown once. Share securely with the user."
+                        onChange={(event) => setCreateState((previous) => ({ ...previous, password: event.target.value }))}
+                        helperText="Share this securely with the user after creation."
                     />
-
-                    <Select
-                        fullWidth
-                        value={createState.role}
-                        onChange={(event) => setCreateState((prev) => ({ ...prev, role: event.target.value }))}
-                        sx={{ mt: 2 }}
-                    >
+                    <Select fullWidth value={createState.role} onChange={(event) => setCreateState((previous) => ({ ...previous, role: event.target.value }))}>
                         {USER_ROLE_OPTIONS.map((role) => (
                             <MenuItem key={role} value={role}>
                                 {toTitle(role)}
                             </MenuItem>
                         ))}
                     </Select>
-
-                    {(createState.role === 'test_operator' || createState.role === 'flash_operator') && (
+                    {(createState.role === 'test_operator' || createState.role === 'flash_operator') ? (
                         <TextField
                             fullWidth
-                            margin="normal"
                             label="Assigned Station"
                             value={createState.assigned_station}
-                            onChange={(event) => setCreateState((prev) => ({ ...prev, assigned_station: event.target.value }))}
+                            onChange={(event) => setCreateState((previous) => ({ ...previous, assigned_station: event.target.value }))}
                         />
-                    )}
-
+                    ) : null}
                     <FormControlLabel
-                        sx={{ mt: 1 }}
-                        control={<Switch checked={createState.is_active} onChange={(event) => setCreateState((prev) => ({ ...prev, is_active: event.target.checked }))} />}
-                        label="User Active"
+                        control={<Switch checked={createState.is_active} onChange={(event) => setCreateState((previous) => ({ ...previous, is_active: event.target.checked }))} />}
+                        label="User active immediately"
                     />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setCreateOpen(false)}>Cancel</Button>
-                    <Button variant="contained" onClick={handleCreateUser} disabled={isLoading}>
-                        Create User
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                    <Stack direction="row" justifyContent="flex-end" spacing={1.5}>
+                        <Button variant="outlined" onClick={() => setCreateOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button variant="contained" startIcon={<MailPlus size={16} />} onClick={() => void handleCreateUser()} disabled={isLoading}>
+                            Invite user
+                        </Button>
+                    </Stack>
+                </Stack>
+            </ActionDrawer>
 
-            <Dialog open={editOpen} onClose={() => setEditOpen(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>Edit User</DialogTitle>
-                <DialogContent>
-                    <TextField
-                        fullWidth
-                        margin="normal"
-                        label="Name"
-                        value={editState.name}
-                        onChange={(event) => setEditState((prev) => ({ ...prev, name: event.target.value }))}
-                    />
-
-                    <TextField
-                        fullWidth
-                        margin="normal"
-                        label="Email"
-                        value={editState.email}
-                        onChange={(event) => setEditState((prev) => ({ ...prev, email: event.target.value }))}
-                    />
-
-                    <TextField
-                        fullWidth
-                        margin="normal"
-                        label="Phone"
-                        value={editState.phone}
-                        onChange={(event) => setEditState((prev) => ({ ...prev, phone: event.target.value }))}
-                    />
-
-                    <Select
-                        fullWidth
-                        value={editState.role}
-                        onChange={(event) => setEditState((prev) => ({ ...prev, role: event.target.value }))}
-                        sx={{ mt: 2 }}
-                    >
+            <ActionDrawer
+                open={editOpen}
+                onClose={() => setEditOpen(false)}
+                title="Edit User"
+                subtitle="Update role, station assignment, and account activation without affecting the route structure."
+            >
+                <Stack spacing={2}>
+                    <TextField fullWidth label="Name" value={editState.name} onChange={(event) => setEditState((previous) => ({ ...previous, name: event.target.value }))} />
+                    <TextField fullWidth label="Email" value={editState.email} onChange={(event) => setEditState((previous) => ({ ...previous, email: event.target.value }))} />
+                    <TextField fullWidth label="Phone" value={editState.phone} onChange={(event) => setEditState((previous) => ({ ...previous, phone: event.target.value }))} />
+                    <Select fullWidth value={editState.role} onChange={(event) => setEditState((previous) => ({ ...previous, role: event.target.value }))}>
                         {USER_ROLE_OPTIONS.map((role) => (
                             <MenuItem key={role} value={role}>
                                 {toTitle(role)}
                             </MenuItem>
                         ))}
                     </Select>
-
-                    {(editState.role === 'test_operator' || editState.role === 'flash_operator') && (
+                    {(editState.role === 'test_operator' || editState.role === 'flash_operator') ? (
                         <TextField
                             fullWidth
-                            margin="normal"
                             label="Assigned Station"
                             value={editState.assigned_station}
-                            onChange={(event) => setEditState((prev) => ({ ...prev, assigned_station: event.target.value }))}
+                            onChange={(event) => setEditState((previous) => ({ ...previous, assigned_station: event.target.value }))}
                         />
-                    )}
-
+                    ) : null}
                     <FormControlLabel
-                        sx={{ mt: 1 }}
-                        control={<Switch checked={editState.is_active} onChange={(event) => setEditState((prev) => ({ ...prev, is_active: event.target.checked }))} />}
-                        label="User Active"
+                        control={<Switch checked={editState.is_active} onChange={(event) => setEditState((previous) => ({ ...previous, is_active: event.target.checked }))} />}
+                        label="User active"
                     />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setEditOpen(false)}>Cancel</Button>
-                    <Button variant="contained" onClick={handleSaveUser} disabled={isLoading}>
-                        Save Changes
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                    <Stack direction="row" justifyContent="flex-end" spacing={1.5}>
+                        <Button variant="outlined" onClick={() => setEditOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button variant="contained" onClick={() => void handleSaveUser()} disabled={isLoading}>
+                            Save Changes
+                        </Button>
+                    </Stack>
+                </Stack>
+            </ActionDrawer>
         </Box>
     );
 };
